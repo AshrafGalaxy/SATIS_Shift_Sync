@@ -719,10 +719,10 @@ export default function DashboardOverview() {
                                         <Button
                                             size="lg"
                                             onClick={startGeneration}
-                                            className={`w-full h-16 text-lg rounded-2xl text-white shadow-xl transition-all duration-300 group hover:scale-[1.02] active:scale-95 ${isDbReady ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-blue-600/25 hover:shadow-blue-600/40" : "bg-slate-400 dark:bg-slate-800 hover:bg-slate-500 dark:hover:bg-slate-700 shadow-none"}`}
+                                            className={`w-full min-h-[4rem] h-auto py-3 px-4 text-sm sm:text-base lg:text-lg rounded-2xl text-white shadow-xl transition-all duration-300 group hover:scale-[1.02] active:scale-95 flex-col sm:flex-row items-center justify-center text-center whitespace-normal leading-tight ${isDbReady ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-blue-600/25 hover:shadow-blue-600/40" : "bg-slate-400 dark:bg-slate-800 hover:bg-slate-500 dark:hover:bg-slate-700 shadow-none"}`}
                                         >
-                                            <Play className={`w-5 h-5 mr-3 transition-all ${isDbReady ? "fill-white/20 group-hover:fill-white/40" : "fill-white/10"}`} />
-                                            {isDbReady ? "Generate Smart Timetable" : "Setup Required (Click for details)"}
+                                            <Play className={`w-5 h-5 sm:mr-3 mb-1 sm:mb-0 shrink-0 transition-all ${isDbReady ? "fill-white/20 group-hover:fill-white/40" : "fill-white/10"}`} />
+                                            <span>{isDbReady ? "Generate Smart Timetable" : "Setup Required (Click for details)"}</span>
                                         </Button>
                                         <p className="text-xs text-slate-500 mt-4 flex items-center gap-1.5 transition-opacity">
                                             <Clock className="w-3.5 h-3.5" />

@@ -205,7 +205,7 @@ export default function ResourceHeatmapView() {
                                                                     : 'bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20 text-orange-700 dark:text-orange-400 hover:ring-orange-500'
 
                                                                 }`}>
-                                                                <span className="text-[10px] font-semibold tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <span className="text-[10px] font-semibold tracking-wider uppercase transition-opacity">
                                                                     {status.slice(0, 4)}
                                                                 </span>
                                                             </div>
