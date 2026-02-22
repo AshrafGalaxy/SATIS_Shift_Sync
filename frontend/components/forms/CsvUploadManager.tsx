@@ -19,7 +19,7 @@ const REQUIRED_HEADERS = {
     workloads: ["faculty_id", "subject_code", "event_type", "target_groups", "weekly_hours", "consecutive_hours", "required_room_tags"]
 };
 
-export default function CsvUploadManager() {
+export default function CsvUploadManager({ onSuccess }: { onSuccess?: () => void }) {
     const [uploadType, setUploadType] = useState<"rooms" | "faculty" | "workloads">("rooms");
     const [isParsing, setIsParsing] = useState(false);
     const [statusText, setStatusText] = useState("");
@@ -148,6 +148,7 @@ export default function CsvUploadManager() {
 
         alert(`Successfully injected ${data.length} ${uploadType} records into the Database!`);
         setStatusText("Ready");
+        if (onSuccess) onSuccess();
     };
 
     return (

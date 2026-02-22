@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Filter, Download, Plus, ChevronLeft, ChevronRight, Maximize2, Loader2, CalendarDays } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Filter, Download, Plus, ChevronLeft, ChevronRight, Maximize2, Minimize2, Loader2, CalendarDays, FileSpreadsheet, Calendar as CalendarIcon, Printer, FileText, ChevronDown } from "lucide-react";
+import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/utils/supabase/client";
@@ -27,7 +29,17 @@ export function MasterTimetableView() {
     const [availableFilters, setAvailableFilters] = useState<string[]>(["All Divisions"]);
     const [slots, setSlots] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const gridRef = useRef<HTMLDivElement>(null);
     const supabase = createClient();
+
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    }, []);
 
     useEffect(() => {
         const fetchLatestTimetable = async () => {
@@ -47,10 +59,14 @@ export function MasterTimetableView() {
                 if (targetId) {
                     query = query.eq("id", targetId);
                 } else {
-                    query = query.order("created_at", { ascending: false }).limit(1);
+                    query = query.eq("is_active", true).order("created_at", { ascending: false }).limit(1);
                 }
 
-                const { data: latestTimetable } = await query.single();
+                const { data: latestTimetable, error } = await query.single();
+                if (error) {
+                    // Suppress error if it's just 'no rows returned'
+                    if (error.code !== "PGRST116") console.error("Timetable Fetch Error:", error);
+                }
 
                 if (latestTimetable && latestTimetable.matrix_data && latestTimetable.matrix_data.schedule) {
                     // Map Python generic array back into our UI grid system
@@ -78,11 +94,134 @@ export function MasterTimetableView() {
         fetchLatestTimetable();
     }, []);
 
+    const exportToCSV = () => {
+        if (!slots || slots.length === 0) return alert("No timetable data to export.");
+
+        const headers = ["Day", "Time", "Subject", "Faculty", "Room", "Type", "Divisions/Batches"];
+        const rows = slots.map(slot => [
+            slot.day,
+            mapMilitaryTo12Hour(slot.time).replace(":", ""), // Simple string to avoid excel issues
+            `"${slot.subject}"`,
+            `"${slot.faculty}"`,
+            slot.room,
+            slot.type,
+            `"${slot.targets.join(", ")}"`
+        ]);
+
+        const csvContent = [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Master_Timetable_${new Date().getTime()}.csv`);
+        link.style.visibility = "hidden";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const exportToExcel = () => {
+        if (!slots || slots.length === 0) return alert("No timetable data to export.");
+
+        const gridRows: any[][] = [];
+
+        // Header Row
+        const headers = ["Day / Time", ...TIMES.map(t => mapMilitaryTo12Hour(t))];
+        gridRows.push(headers);
+
+        // Body Rows
+        DAYS.forEach(day => {
+            const row: string[] = [day];
+            TIMES.forEach(time => {
+                if (time === 13) {
+                    row.push("Lunch Break");
+                } else {
+                    const activeSlots = slots.filter(s => s.day === day && s.time === time && (activeFilter === "All Divisions" || s.targets.includes(activeFilter)));
+                    if (activeSlots.length === 0) {
+                        row.push("");
+                    } else {
+                        const cellText = activeSlots.map(s => `[${s.type.toUpperCase()}] ${s.subject}\nFaculty: ${s.faculty}\nRoom: ${s.room}\nDivs: ${s.targets.join(", ")}`).join("\n\n---\n\n");
+                        row.push(cellText);
+                    }
+                }
+            });
+            gridRows.push(row);
+        });
+
+        const worksheet = XLSX.utils.aoa_to_sheet(gridRows);
+
+        // Auto-size columns slightly
+        const wscols = [{ wch: 15 }, ...TIMES.map(() => ({ wch: 30 }))];
+        worksheet["!cols"] = wscols;
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Master Timetable");
+        XLSX.writeFile(workbook, `Master_Timetable_Grid_${new Date().getTime()}.xlsx`);
+    };
+
+    const exportToICS = () => {
+        if (!slots || slots.length === 0) return alert("No timetable data to export.");
+
+        // Define a base fake Monday for the generator to anchor dates to.
+        const dayMap: Record<string, string> = { "Mon": "20240304", "Tue": "20240305", "Wed": "20240306", "Thu": "20240307", "Fri": "20240308" };
+
+        let icsContent = `BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//ShiftSync//Timetable Generator//EN\nCALSCALE:GREGORIAN\nMETHOD:PUBLISH\n`;
+
+        slots.forEach((slot, index) => {
+            const dateStr = dayMap[slot.day];
+            if (!dateStr) return;
+
+            const startTime = `${slot.time.toString().padStart(2, '0')}0000`;
+            const endTime = `${(slot.time + 1).toString().padStart(2, '0')}0000`;
+            const uid = `shiftsync_${new Date().getTime()}_${index}@shiftsync.local`;
+
+            icsContent += `BEGIN:VEVENT\n`;
+            icsContent += `DTSTART;TZID=Asia/Kolkata:${dateStr}T${startTime}\n`;
+            icsContent += `DTEND;TZID=Asia/Kolkata:${dateStr}T${endTime}\n`;
+            icsContent += `SUMMARY:[${slot.type.toUpperCase()}] ${slot.subject}\n`;
+            icsContent += `LOCATION:${slot.room}\n`;
+            icsContent += `DESCRIPTION:Faculty: ${slot.faculty}\\nBatches: ${slot.targets.join(", ")}\n`;
+            icsContent += `UID:${uid}\n`;
+            icsContent += `STATUS:CONFIRMED\n`;
+            icsContent += `END:VEVENT\n`;
+        });
+
+        icsContent += `END:VCALENDAR`;
+
+        const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
+        const link = document.createElement("a");
+        link.href = window.URL.createObjectURL(blob);
+        link.setAttribute("download", `ShiftSync_Calendar_${new Date().getTime()}.ics`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const exportToPDF = () => {
+        window.print();
+    };
+
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            gridRef.current?.requestFullscreen().catch(err => {
+                alert(`Error attempting to enable fullscreen mode: ${err.message}`);
+            });
+        } else {
+            document.exitFullscreen();
+        }
+    };
+
     return (
-        <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col pt-2 animate-in fade-in duration-500">
+        <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col pt-2 animate-in fade-in duration-500 print:h-auto print:space-y-2">
+            <style>{`
+                @media print {
+                    @page { size: landscape; margin: 10mm; }
+                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                }
+            `}</style>
 
             {/* Header & Controls */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0 print:hidden">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">Master Timetable</h1>
                     <p className="text-sm text-slate-500 dark:text-slate-400">View and resolve remaining conflicts across all divisions.</p>
@@ -100,19 +239,49 @@ export function MasterTimetableView() {
                             ))}
                         </select>
                     </div>
-                    <Button variant="outline" size="sm" className="h-9">
-                        <Download className="w-4 h-4 mr-2" />
-                        Export
-                    </Button>
-                    <Button size="sm" className="h-9 bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20">
-                        <Maximize2 className="w-4 h-4 mr-2" />
-                        Fullscreen Focus
+
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-9">
+                                <Download className="w-4 h-4 mr-2" />
+                                Export Options
+                                <ChevronDown className="w-4 h-4 ml-2 opacity-50" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuLabel className="text-xs">Data Formats</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={exportToCSV} className="cursor-pointer">
+                                <FileText className="w-4 h-4 mr-2 text-slate-500" />
+                                CSV Flat Data
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={exportToExcel} className="cursor-pointer text-green-600 focus:text-green-600 focus:bg-green-50 dark:focus:bg-green-950/50">
+                                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                                Excel 2D Grid
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel className="text-xs">Integration</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={exportToICS} className="cursor-pointer text-teal-600 focus:text-teal-600 focus:bg-teal-50 dark:focus:bg-teal-950/50">
+                                <CalendarIcon className="w-4 h-4 mr-2" />
+                                Export to iCal (.ics)
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel className="text-xs">Printable</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={exportToPDF} className="cursor-pointer text-orange-600 focus:text-orange-600 focus:bg-orange-50 dark:focus:bg-orange-950/50">
+                                <Printer className="w-4 h-4 mr-2" />
+                                Save as PDF
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    <Button size="sm" className="h-9 bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 md:flex hidden" onClick={toggleFullscreen}>
+                        {isFullscreen ? <Minimize2 className="w-4 h-4 mr-2" /> : <Maximize2 className="w-4 h-4 mr-2" />}
+                        {isFullscreen ? "Exit Fullscreen" : "Fullscreen Focus"}
                     </Button>
                 </div>
             </div>
 
             {/* Grid Container */}
-            <div className="flex-1 overflow-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm relative">
+            <div ref={gridRef} className={`flex-1 overflow-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm relative print:overflow-visible print:border-none print:shadow-none print:w-full ${isFullscreen ? 'p-6 rounded-none border-none' : ''}`}>
                 {isLoading ? (
                     <div className="w-full h-full flex flex-col items-center justify-center space-y-4 min-h-[400px]">
                         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
@@ -129,7 +298,7 @@ export function MasterTimetableView() {
                         </div>
                     </div>
                 ) : (
-                    <div className="min-w-[1000px] h-full inline-block">
+                    <div className="min-w-[1000px] h-full inline-block print:min-w-0 print:w-full">
                         {/* Header Row (Times) */}
                         <div className="flex sticky top-0 z-20 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm">
                             <div className="w-24 shrink-0 border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-3 sticky left-0 z-30 flex items-center justify-center font-medium text-xs text-slate-500">

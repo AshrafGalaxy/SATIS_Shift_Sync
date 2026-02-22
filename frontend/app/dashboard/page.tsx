@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, FileText, CheckCircle2, Clock, Upload, Users, Building, GraduationCap, Database, Loader2 } from "lucide-react";
+import { Play, FileText, CheckCircle2, Clock, Upload, Users, Building, GraduationCap, Database, Loader2, RefreshCcw, AlertOctagon } from "lucide-react";
 
 import { createClient } from "@/utils/supabase/client";
 
@@ -36,49 +36,49 @@ export default function DashboardOverview() {
         setIsMounted(true);
     }, []);
 
-    useEffect(() => {
-        const fetchDashboardStats = async () => {
-            try {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (!user) return;
+    const fetchDashboardStats = async () => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
 
-                const { data: profile } = await supabase.from("profiles").select("institution_id").eq("id", user.id).single();
-                if (!profile?.institution_id) return;
+            const { data: profile } = await supabase.from("profiles").select("institution_id").eq("id", user.id).single();
+            if (!profile?.institution_id) return;
 
-                const instId = profile.institution_id;
+            const instId = profile.institution_id;
 
-                // Fetch real counts
-                const { count: facultyCount } = await supabase.from("faculty_settings").select("*", { count: "exact", head: true });
-                const { count: roomCount } = await supabase.from("rooms").select("*", { count: "exact", head: true }).eq("institution_id", instId);
-                const { count: workloadsCount } = await supabase.from("workloads").select("*", { count: "exact", head: true });
+            // Fetch real counts
+            const { count: facultyCount } = await supabase.from("faculty_settings").select("*", { count: "exact", head: true });
+            const { count: roomCount } = await supabase.from("rooms").select("*", { count: "exact", head: true }).eq("institution_id", instId);
+            const { count: workloadsCount } = await supabase.from("workloads").select("*", { count: "exact", head: true });
 
-                // Get last generation time
-                const { data: latestTs } = await supabase
-                    .from("generated_timetables")
-                    .select("created_at")
-                    .eq("institution_id", instId)
-                    .order("created_at", { ascending: false })
-                    .limit(1)
-                    .single();
+            // Get last generation time
+            const { data: latestTs } = await supabase
+                .from("generated_timetables")
+                .select("created_at")
+                .eq("institution_id", instId)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .single();
 
-                setIsDbReady((facultyCount ?? 0) > 0 && (roomCount ?? 0) > 0);
+            setIsDbReady((facultyCount ?? 0) > 0 && (roomCount ?? 0) > 0);
 
-                setStats([
-                    { name: "Total Faculty", value: facultyCount || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-500/10" },
-                    { name: "Available Rooms", value: roomCount || 0, icon: Building, color: "text-purple-500", bg: "bg-purple-50 dark:bg-purple-500/10" },
-                    { name: "Total Workloads", value: workloadsCount || 0, icon: GraduationCap, color: "text-teal-500", bg: "bg-teal-50 dark:bg-teal-500/10" },
-                ]);
+            setStats([
+                { name: "Total Faculty", value: facultyCount || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-500/10" },
+                { name: "Available Rooms", value: roomCount || 0, icon: Building, color: "text-purple-500", bg: "bg-purple-50 dark:bg-purple-500/10" },
+                { name: "Total Workloads", value: workloadsCount || 0, icon: GraduationCap, color: "text-teal-500", bg: "bg-teal-50 dark:bg-teal-500/10" },
+            ]);
 
-                if (latestTs) {
-                    const date = new Date(latestTs.created_at);
-                    setLastGenerationDate(date.toLocaleString());
-                }
-
-            } catch (err) {
-                console.error("Failed to load stats", err);
+            if (latestTs) {
+                const date = new Date(latestTs.created_at);
+                setLastGenerationDate(date.toLocaleString());
             }
-        };
 
+        } catch (err) {
+            console.error("Failed to load stats", err);
+        }
+    };
+
+    useEffect(() => {
         fetchDashboardStats();
     }, []);
 
@@ -360,12 +360,7 @@ export default function DashboardOverview() {
             const instId = profile?.institution_id;
 
             if (instId) {
-                await supabase.from("generated_timetables").delete().eq("institution_id", instId);
                 await supabase.from("rooms").delete().eq("institution_id", instId);
-
-                // CRITICAL FIX: Detach profile FIRST to prevent PostgreSQL ON DELETE CASCADE from erasing the auth user's profile
-                await supabase.from("profiles").update({ institution_id: null }).eq("id", user.id);
-                await supabase.from("institutions").delete().eq("id", instId);
             }
 
             const { data: faculties } = await supabase.from("faculty_settings").select("id").eq("profile_id", user.id);
@@ -393,31 +388,42 @@ export default function DashboardOverview() {
             if (!user) throw new Error("Authentication missing. Please log in.");
 
             const profileId = user.id;
+            const { data: profile } = await supabase.from("profiles").select("id, institution_id").eq("id", profileId).maybeSingle();
+            let instId = profile?.institution_id;
 
-            // 1. Institutions
-            const { data: instData, error: instErr } = await supabase
-                .from("institutions")
-                .insert({
+            // 1. Institutions (Upsert)
+            if (instId) {
+                await supabase.from("institutions").update({
                     name: "ShiftSync Demo College",
                     days_active: payload.college_settings.days_active,
                     time_slots: payload.college_settings.time_slots,
                     lunch_slot: payload.college_settings.lunch_slot,
                     max_continuous_lectures: payload.college_settings.max_continuous_lectures
-                })
-                .select().single();
-            if (instErr) throw instErr;
-            const instId = instData.id;
+                }).eq("id", instId);
+            } else {
+                const { data: instData, error: instErr } = await supabase
+                    .from("institutions")
+                    .insert({
+                        name: "ShiftSync Demo College",
+                        days_active: payload.college_settings.days_active,
+                        time_slots: payload.college_settings.time_slots,
+                        lunch_slot: payload.college_settings.lunch_slot,
+                        max_continuous_lectures: payload.college_settings.max_continuous_lectures
+                    })
+                    .select().single();
+                if (instErr) throw instErr;
+                instId = instData.id;
+            }
 
-            // Heal missing profile if it was accidentally cascade deleted by the old bug
-            const { data: hasProfile } = await supabase.from("profiles").select("id").eq("id", profileId).maybeSingle();
-            if (!hasProfile) {
+            // Heal missing profile
+            if (!profile) {
                 await supabase.from("profiles").insert({
                     id: profileId,
                     full_name: "ShiftSync Admin",
                     role: "admin",
                     institution_id: instId
                 });
-            } else {
+            } else if (profile.institution_id !== instId) {
                 await supabase.from("profiles").update({ institution_id: instId }).eq("id", profileId);
             }
 
@@ -543,7 +549,18 @@ export default function DashboardOverview() {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                alert("Generation Failed: " + JSON.stringify(errorData.detail || errorData));
+                const errorMsg = JSON.stringify(errorData.detail || errorData);
+
+                // Track failure asynchronously (Don't await to avoid stalling error alert)
+                supabase.from("generated_timetables").insert({
+                    institution_id: instId,
+                    is_active: false,
+                    matrix_data: {},
+                    status: 'failed',
+                    error_message: errorMsg
+                }).then();
+
+                alert("Generation Failed: " + errorMsg);
                 setIsGenerating(false);
                 return;
             }
@@ -554,11 +571,19 @@ export default function DashboardOverview() {
             setGenerationStep(2); // Optimizing
 
             // STEP 2: Save the generated matrix to Supabase `generated_timetables`
-            await supabase.from("generated_timetables").insert({
+            const { error: insertErr } = await supabase.from("generated_timetables").insert({
                 institution_id: instId,
                 is_active: true,
-                matrix_data: data
+                matrix_data: data,
+                status: 'success'
             });
+
+            if (insertErr) {
+                console.error("Supabase Insert Error:", insertErr);
+                alert("Database Error! Did you run the SQL Migration to add 'status' column? " + insertErr.message);
+                setIsGenerating(false);
+                return;
+            }
 
             setTimeout(() => {
                 setGenerationStep(3); // Complete
@@ -591,7 +616,122 @@ export default function DashboardOverview() {
                     <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">Overview</h1>
                     <p className="text-slate-500 dark:text-slate-400 mt-1">Manage master data and trigger timetable generation.</p>
                 </div>
+                <Button
+                    onClick={clearDatabase}
+                    disabled={isSeeding || isClearing}
+                    variant="outline"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200 dark:border-red-900/30"
+                >
+                    {isClearing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <AlertOctagon className="w-4 h-4 mr-2" />}
+                    {isClearing ? "Nuking Database..." : "Danger: Nuke Database"}
+                </Button>
             </div>
+
+            {/* Top Full-Width Hero: AI Generation Trigger */}
+            <Card className="border-slate-200/60 dark:border-slate-800/60 shadow-xl shadow-blue-500/5 dark:shadow-blue-500/10 relative overflow-hidden flex flex-col transition-all duration-500 hover:shadow-blue-500/20 hover:border-blue-300 dark:hover:border-blue-700/50">
+                {/* Background glowing orb */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 dark:bg-blue-600/20 blur-[80px] rounded-full pointer-events-none transition-transform duration-700 hover:scale-150" />
+
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-2xl">
+                        <div className="w-3 h-3 rounded-full bg-teal-500 animate-pulse" />
+                        AI Solver Engine
+                    </CardTitle>
+                    <CardDescription className="text-base text-slate-500 dark:text-slate-400">Generate an optimal collision-free timetable conforming to all hard and soft constraints.</CardDescription>
+                </CardHeader>
+
+                <CardContent className="flex flex-col md:flex-row items-center justify-between gap-8 py-6">
+                    <div className="w-full md:w-auto flex-1 flex flex-col justify-center items-start">
+                        <AnimatePresence mode="wait">
+                            {!isGenerating ? (
+                                <motion.div
+                                    key="idle"
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    className="w-full"
+                                >
+                                    <div className="flex flex-col sm:flex-row gap-4 w-full">
+                                        <Button
+                                            size="lg"
+                                            onClick={startGeneration}
+                                            className={`flex-1 min-h-[4rem] h-auto py-3 px-6 text-sm sm:text-base lg:text-lg rounded-2xl text-white shadow-xl transition-all duration-300 group hover:scale-[1.02] active:scale-95 flex-col sm:flex-row items-center justify-center text-center whitespace-normal leading-tight ${isDbReady ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-blue-600/25 hover:shadow-blue-600/40" : "bg-slate-400 dark:bg-slate-800 hover:bg-slate-500 dark:hover:bg-slate-700 shadow-none"}`}
+                                        >
+                                            <Play className={`w-5 h-5 sm:mr-3 mb-1 sm:mb-0 shrink-0 transition-all ${isDbReady ? "fill-white/20 group-hover:fill-white/40" : "fill-white/10"}`} />
+                                            <span>{isDbReady ? "Generate Smart Timetable" : "Setup Required (Click for details)"}</span>
+                                        </Button>
+                                        <Button
+                                            size="lg"
+                                            variant="outline"
+                                            onClick={() => window.location.reload()}
+                                            disabled={!isDbReady}
+                                            className="min-h-[4rem] h-auto rounded-2xl border-slate-200 dark:border-slate-800 shrink-0 px-8"
+                                        >
+                                            <RefreshCcw className="w-5 h-5 mr-3 text-slate-500" />
+                                            Refresh Sync
+                                        </Button>
+                                    </div>
+                                    <p className="text-sm text-slate-500 mt-4 flex items-center gap-1.5 transition-opacity">
+                                        <Clock className="w-4 h-4" />
+                                        Estimated solving time: ~45s
+                                    </p>
+                                </motion.div>
+                            ) : (
+                                <motion.div
+                                    key="generating"
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="w-full flex items-center gap-8 bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-blue-100 dark:border-blue-900/30"
+                                >
+                                    <div className="relative w-24 h-24 flex justify-center items-center shrink-0">
+                                        {generationStep < 3 ? (
+                                            <SolverLoadingGear className="w-full h-full drop-shadow-lg" />
+                                        ) : (
+                                            <motion.div
+                                                initial={{ scale: 0 }}
+                                                animate={{ scale: 1 }}
+                                                className="w-20 h-20 bg-teal-500 rounded-full flex justify-center items-center shadow-lg shadow-teal-500/30"
+                                            >
+                                                <CheckCircle2 className="w-10 h-10 text-white" />
+                                            </motion.div>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2 flex-1 w-full max-w-xl">
+                                        <h3 className="font-semibold text-xl text-slate-900 dark:text-slate-50">
+                                            {generationStep === 0 && "Parsing constraints..."}
+                                            {generationStep === 1 && "Running CP-SAT Solver..."}
+                                            {generationStep === 2 && "Optimizing soft constraints..."}
+                                            {generationStep === 3 && "Generation Complete!"}
+                                        </h3>
+
+                                        <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-3 overflow-hidden shadow-inner">
+                                            <motion.div
+                                                className="bg-gradient-to-r from-blue-500 to-teal-400 h-full"
+                                                initial={{ width: "0%" }}
+                                                animate={{ width: generationStep === 0 ? "25%" : generationStep === 1 ? "60%" : generationStep === 2 ? "90%" : "100%" }}
+                                                transition={{ duration: 0.5 }}
+                                            />
+                                        </div>
+
+                                        <p className="text-sm text-slate-500 font-mono mt-2">
+                                            {generationStep === 0 && "> Initializing Google OR-Tools..."}
+                                            {generationStep === 1 && "> Resolving room/teacher conflicts (4,231 vars)"}
+                                            {generationStep === 2 && "> Distributing lunch breaks & gaps"}
+                                            {generationStep === 3 && "> Saving to Supabase Data Layer..."}
+                                        </p>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+                </CardContent>
+
+                <CardFooter className="bg-slate-50/50 dark:bg-slate-900/20 border-t border-slate-100 dark:border-slate-800/50 text-sm text-slate-600 dark:text-slate-400 p-4 font-medium flex gap-2 items-center">
+                    <FileText className="w-4 h-4 ml-2" />
+                    {lastGenerationDate ? `Last solved on ${lastGenerationDate} via Cloud Engine.` : "No timetable has been generated yet."}
+                </CardFooter>
+            </Card>
 
             {/* Metrics Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -610,10 +750,10 @@ export default function DashboardOverview() {
                 ))}
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+            <div className="w-full space-y-4 pb-8">
 
-                {/* Left Column: Data Ingestion */}
-                <div className="xl:col-span-2 space-y-4">
+                {/* Main Data Ingestion (Full Width) */}
+                <div className="w-full space-y-4">
                     <Card className="border-slate-200/60 dark:border-slate-800/60 shadow-sm h-full">
                         <CardHeader>
                             <CardTitle>Master Data Ingestion</CardTitle>
@@ -621,33 +761,47 @@ export default function DashboardOverview() {
                         </CardHeader>
                         <CardContent>
                             <Tabs defaultValue="global" className="w-full">
-                                <TabsList className="w-full justify-start border-b border-slate-200 dark:border-slate-800 rounded-none bg-transparent p-0 h-12 overflow-x-auto no-scrollbar flex-nowrap shrink-0 whitespace-nowrap">
-                                    <TabsTrigger value="global" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">1. Global Settings</TabsTrigger>
-                                    <TabsTrigger value="csv" className="data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-12 px-6 font-medium text-emerald-600 dark:text-emerald-400">Bulk CSV Upload</TabsTrigger>
-                                    <TabsTrigger value="rooms" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">2. Rooms</TabsTrigger>
-                                    <TabsTrigger value="faculty" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">3. Faculty</TabsTrigger>
-                                    <TabsTrigger value="workloads" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">4. Workloads</TabsTrigger>
-                                    <TabsTrigger value="demo_data" className="data-[state=active]:border-b-2 data-[state=active]:border-teal-500 rounded-none h-12 px-6 text-teal-600 dark:text-teal-400">Database Tools</TabsTrigger>
+                                <TabsList className="w-full justify-start border-none bg-slate-100/50 dark:bg-slate-900/50 p-1.5 h-auto rounded-xl gap-2 overflow-x-auto no-scrollbar flex-nowrap shrink-0 whitespace-nowrap mb-4">
+                                    <TabsTrigger value="global" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm rounded-lg px-5 py-2.5 text-sm font-semibold transition-all">
+                                        1. Global Settings
+                                    </TabsTrigger>
+                                    <TabsTrigger value="csv" className="data-[state=active]:bg-emerald-50 dark:data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400 data-[state=active]:shadow-sm rounded-lg px-5 py-2.5 text-sm font-semibold text-slate-500 hover:text-emerald-600 transition-all flex items-center gap-2">
+                                        <Database className="w-4 h-4" />
+                                        Upload CSV
+                                    </TabsTrigger>
+                                    <TabsTrigger value="rooms" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm rounded-lg px-5 py-2.5 text-sm font-semibold transition-all">
+                                        2. Rooms
+                                    </TabsTrigger>
+                                    <TabsTrigger value="faculty" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm rounded-lg px-5 py-2.5 text-sm font-semibold transition-all">
+                                        3. Faculty
+                                    </TabsTrigger>
+                                    <TabsTrigger value="workloads" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm rounded-lg px-5 py-2.5 text-sm font-semibold transition-all">
+                                        4. Workloads
+                                    </TabsTrigger>
+                                    <TabsTrigger value="demo_data" className="data-[state=active]:bg-teal-50 dark:data-[state=active]:bg-teal-500/10 data-[state=active]:text-teal-700 dark:data-[state=active]:text-teal-400 data-[state=active]:shadow-sm rounded-lg px-5 py-2.5 text-sm font-semibold text-slate-500 hover:text-teal-600 transition-all flex items-center gap-2">
+                                        <AlertOctagon className="w-4 h-4" />
+                                        Database Tools
+                                    </TabsTrigger>
                                 </TabsList>
 
                                 <TabsContent value="global" className="pt-6">
-                                    <InstitutionForm onSuccess={() => alert("Global Constraints Set!")} />
+                                    <InstitutionForm onSuccess={() => { alert("Global Constraints Set!"); fetchDashboardStats(); }} />
                                 </TabsContent>
 
                                 <TabsContent value="csv" className="pt-6">
-                                    <CsvUploadManager />
+                                    <CsvUploadManager onSuccess={() => fetchDashboardStats()} />
                                 </TabsContent>
 
                                 <TabsContent value="rooms" className="pt-6">
-                                    <RoomForm onSuccess={() => alert("Room Added! Check the top dashboard stats to verify.")} />
+                                    <RoomForm onSuccess={() => { alert("Room Added! Check the top dashboard stats to verify."); fetchDashboardStats(); }} />
                                 </TabsContent>
 
                                 <TabsContent value="faculty" className="pt-6">
-                                    <FacultyForm onSuccess={() => alert("Faculty Settings Saved! Check the top dashboard stats to verify.")} />
+                                    <FacultyForm onSuccess={() => { alert("Faculty Settings Saved! Check the top dashboard stats to verify."); fetchDashboardStats(); }} />
                                 </TabsContent>
 
                                 <TabsContent value="workloads" className="pt-6">
-                                    <WorkloadForm onSuccess={() => alert("Workload Mapped Successfully!")} />
+                                    <WorkloadForm onSuccess={() => { alert("Workload Mapped Successfully!"); fetchDashboardStats(); }} />
                                 </TabsContent>
 
                                 <TabsContent value="demo_data" className="pt-6">
@@ -674,16 +828,6 @@ export default function DashboardOverview() {
                                             <Database className="w-4 h-4 mr-2" />
                                             {isSeeding ? "Importing to SQL..." : "Step 1: Save Demo Configuration to Database"}
                                         </Button>
-                                        <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-                                            <Button
-                                                onClick={clearDatabase}
-                                                disabled={isSeeding || isClearing}
-                                                variant="outline"
-                                                className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200 dark:border-red-900/30"
-                                            >
-                                                {isClearing ? "Nuking Database..." : "Danger: Nuke Database & Start Fresh"}
-                                            </Button>
-                                        </div>
                                     </div>
                                 </TabsContent>
                             </Tabs>
@@ -691,102 +835,8 @@ export default function DashboardOverview() {
                     </Card>
                 </div>
 
-                {/* Right Column: AI Generation Trigger */}
-                <div className="xl:col-span-1">
-                    <Card className="border-slate-200/60 dark:border-slate-800/60 shadow-xl shadow-blue-500/5 dark:shadow-blue-500/10 h-full relative overflow-hidden flex flex-col transition-all duration-500 hover:shadow-blue-500/20 hover:border-blue-300 dark:hover:border-blue-700/50">
-
-                        {/* Background glowing orb */}
-                        <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 dark:bg-blue-600/20 blur-[60px] rounded-full pointer-events-none transition-transform duration-700 hover:scale-150" />
-
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-xl">
-                                <div className="w-3 h-3 rounded-full bg-teal-500 animate-pulse" />
-                                AI Solver Engine
-                            </CardTitle>
-                            <CardDescription>Generate an optimal collision-free timetable conforming to all hard and soft constraints.</CardDescription>
-                        </CardHeader>
-
-                        <CardContent className="flex-1 flex flex-col items-center justify-center py-10 min-h-[320px]">
-                            <AnimatePresence mode="wait">
-                                {!isGenerating ? (
-                                    <motion.div
-                                        key="idle"
-                                        initial={{ opacity: 0, scale: 0.95 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        exit={{ opacity: 0, scale: 0.95 }}
-                                        className="w-full flex flex-col items-center"
-                                    >
-                                        <Button
-                                            size="lg"
-                                            onClick={startGeneration}
-                                            className={`w-full min-h-[4rem] h-auto py-3 px-4 text-sm sm:text-base lg:text-lg rounded-2xl text-white shadow-xl transition-all duration-300 group hover:scale-[1.02] active:scale-95 flex-col sm:flex-row items-center justify-center text-center whitespace-normal leading-tight ${isDbReady ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-blue-600/25 hover:shadow-blue-600/40" : "bg-slate-400 dark:bg-slate-800 hover:bg-slate-500 dark:hover:bg-slate-700 shadow-none"}`}
-                                        >
-                                            <Play className={`w-5 h-5 sm:mr-3 mb-1 sm:mb-0 shrink-0 transition-all ${isDbReady ? "fill-white/20 group-hover:fill-white/40" : "fill-white/10"}`} />
-                                            <span>{isDbReady ? "Generate Smart Timetable" : "Setup Required (Click for details)"}</span>
-                                        </Button>
-                                        <p className="text-xs text-slate-500 mt-4 flex items-center gap-1.5 transition-opacity">
-                                            <Clock className="w-3.5 h-3.5" />
-                                            Estimated solving time: ~45s
-                                        </p>
-                                    </motion.div>
-                                ) : (
-                                    <motion.div
-                                        key="generating"
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="w-full flex flex-col items-center text-center space-y-6"
-                                    >
-                                        <div className="relative w-32 h-32 flex justify-center items-center">
-                                            {generationStep < 3 ? (
-                                                <SolverLoadingGear className="w-full h-full drop-shadow-lg" />
-                                            ) : (
-                                                <motion.div
-                                                    initial={{ scale: 0 }}
-                                                    animate={{ scale: 1 }}
-                                                    className="w-24 h-24 bg-teal-500 rounded-full flex justify-center items-center shadow-lg shadow-teal-500/30"
-                                                >
-                                                    <CheckCircle2 className="w-12 h-12 text-white" />
-                                                </motion.div>
-                                            )}
-                                        </div>
-
-                                        <div className="space-y-1 w-full">
-                                            <h3 className="font-semibold text-lg text-slate-900 dark:text-slate-50">
-                                                {generationStep === 0 && "Parsing constraints..."}
-                                                {generationStep === 1 && "Running CP-SAT Solver..."}
-                                                {generationStep === 2 && "Optimizing soft constraints..."}
-                                                {generationStep === 3 && "Generation Complete!"}
-                                            </h3>
-
-                                            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 mt-4 overflow-hidden">
-                                                <motion.div
-                                                    className="bg-gradient-to-r from-blue-500 to-teal-400 h-full"
-                                                    initial={{ width: "0%" }}
-                                                    animate={{ width: generationStep === 0 ? "25%" : generationStep === 1 ? "60%" : generationStep === 2 ? "90%" : "100%" }}
-                                                    transition={{ duration: 0.5 }}
-                                                />
-                                            </div>
-
-                                            <p className="text-sm text-slate-500 font-mono mt-3">
-                                                {generationStep === 0 && "> Initializing Google OR-Tools..."}
-                                                {generationStep === 1 && "> Resolving room/teacher conflicts (4,231 vars)"}
-                                                {generationStep === 2 && "> Distributing lunch breaks & gaps"}
-                                                {generationStep === 3 && "> Saving to Supabase..."}
-                                            </p>
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </CardContent>
-
-                        <CardFooter className="bg-slate-50/50 dark:bg-slate-900/20 border-t border-slate-100 dark:border-slate-800/50 text-xs text-slate-500 p-4">
-                            <FileText className="w-3.5 h-3.5 mr-1.5" />
-                            {lastGenerationDate ? `Last solved on ${lastGenerationDate} via Cloud Engine.` : "No timetable has been generated yet."}
-                        </CardFooter>
-                    </Card>
-                </div>
-
             </div>
+
         </div>
     );
 }

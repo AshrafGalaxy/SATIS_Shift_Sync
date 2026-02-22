@@ -49,7 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col md:flex-row">
 
             {/* Mobile Header */}
-            <div className="md:hidden flex items-center justify-between p-4 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-50">
+            <div className="md:hidden flex items-center justify-between p-4 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-50 print:hidden">
                 <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-md bg-gradient-to-tr from-blue-600 to-purple-600 flex items-center justify-center">
                         <CalendarDays className="w-4 h-4 text-white" />
@@ -68,7 +68,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         initial={{ width: 0, opacity: 0 }}
                         animate={{ width: 256, opacity: 1 }}
                         exit={{ width: 0, opacity: 0 }}
-                        className={`fixed inset-y-0 left-0 z-40 transform bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 transition-transform duration-300 md:relative md:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} md:flex md:w-64 flex-col overflow-hidden h-screen`}
+                        className={`fixed inset-y-0 left-0 z-40 transform bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 transition-transform duration-300 md:relative md:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} md:flex md:w-64 flex-col overflow-hidden h-screen print:hidden`}
                     >
                         <div className="p-6 hidden md:flex items-center gap-2">
                             <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
@@ -113,9 +113,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </AnimatePresence>
 
             {/* Main Content Area */}
-            <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+            <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden print:h-auto print:overflow-visible">
                 {/* Top Header */}
-                <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-950/50 backdrop-blur-md hidden md:flex items-center justify-between px-8 sticky top-0 z-30">
+                <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-950/50 backdrop-blur-md hidden md:flex items-center justify-between px-8 sticky top-0 z-30 print:hidden">
                     <div className="flex items-center gap-4">
                         <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-slate-500 hover:text-slate-900 dark:hover:text-slate-50">
                             <Menu className="w-5 h-5" />
@@ -138,7 +138,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </header>
 
                 {/* Page Content */}
-                <div className="flex-1 overflow-y-auto p-4 md:p-8">
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 print:p-0 print:overflow-visible">
                     {children}
                 </div>
             </main>

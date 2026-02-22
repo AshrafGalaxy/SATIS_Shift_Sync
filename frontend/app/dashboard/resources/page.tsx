@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Filter, Download, Plus, Map, Search, Loader2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Filter, Download, Plus, Map, Search, Loader2, ChevronDown, FileText, FileSpreadsheet, Printer, Maximize2, Minimize2 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from "@/components/ui/card";
 import { createClient } from "@/utils/supabase/client";
@@ -70,8 +72,111 @@ export default function ResourceHeatmapView() {
 
     const filteredRooms = rooms.filter(r => r.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
+    // Analytics Calculation for Legend
+    const workingTimes = TIMES.filter(t => t !== 13);
+    const totalSlots = filteredRooms.length * workingTimes.length;
+    let occupiedCount = 0;
+
+    if (totalSlots > 0) {
+        filteredRooms.forEach(room => {
+            workingTimes.forEach(time => {
+                if (getStatus(room.name, time) === "occupied") occupiedCount++;
+            });
+        });
+    }
+
+    const occupiedPct = totalSlots > 0 ? Math.round((occupiedCount / totalSlots) * 100) : 0;
+    const availablePct = totalSlots > 0 ? 100 - occupiedPct : 0;
+
+    // Fullscreen and Export Handlers
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+
+    useEffect(() => {
+        const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    }, []);
+
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            containerRef.current?.requestFullscreen().catch(err => console.error(err));
+        } else {
+            document.exitFullscreen();
+        }
+    };
+
+    const exportToCSV = () => {
+        if (filteredRooms.length === 0) return alert("No rooms to export.");
+
+        const headers = ["Resource", ...TIMES.map(t => mapMilitaryTo12Hour(t))];
+        const rows = filteredRooms.map(room => {
+            const rowData = [room.name];
+            TIMES.forEach(time => {
+                if (time === 13) {
+                    rowData.push("Lunch Break");
+                } else {
+                    const classInfo = matrices.find(m => m.room === room.name && m.slot === time && m.day === selectedDay);
+                    if (classInfo) {
+                        rowData.push(`Occupied (${classInfo.subject} by ${classInfo.faculty})`);
+                    } else {
+                        rowData.push("Available");
+                    }
+                }
+            });
+            return rowData;
+        });
+
+        const csvContent = [headers.join(","), ...rows.map(e => e.map(cell => `"${cell}"`).join(","))].join("\n");
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Resource_Heatmap_${selectedDay}_${new Date().getTime()}.csv`);
+        link.style.visibility = "hidden";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const exportToExcel = () => {
+        if (filteredRooms.length === 0) return alert("No rooms to export.");
+        const gridRows: any[][] = [];
+        const headers = ["Resource", ...TIMES.map(t => mapMilitaryTo12Hour(t))];
+        gridRows.push(headers);
+
+        filteredRooms.forEach(room => {
+            const row: string[] = [room.name];
+            TIMES.forEach(time => {
+                if (time === 13) {
+                    row.push("Lunch Break");
+                } else {
+                    const classInfo = matrices.find(m => m.room === room.name && m.slot === time && m.day === selectedDay);
+                    if (classInfo) {
+                        row.push(`Occupied\n${classInfo.subject}\nFaculty: ${classInfo.faculty}`);
+                    } else {
+                        row.push("Available");
+                    }
+                }
+            });
+            gridRows.push(row);
+        });
+
+        const worksheet = XLSX.utils.aoa_to_sheet(gridRows);
+        const wscols = [{ wch: 15 }, ...TIMES.map(() => ({ wch: 25 }))];
+        worksheet["!cols"] = wscols;
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, `Heatmap ${selectedDay}`);
+        XLSX.writeFile(workbook, `Resource_Heatmap_${selectedDay}_${new Date().getTime()}.xlsx`);
+    };
+
+    const exportToPDF = () => {
+        window.print();
+    };
+
     return (
-        <div className="space-y-6 animate-in fade-in duration-500">
+        <div ref={containerRef} className={`space-y-6 animate-in fade-in duration-500 ${isFullscreen ? 'p-6 bg-slate-50 dark:bg-slate-950 min-h-screen overflow-auto' : ''}`}>
 
             {/* Header & Controls */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -89,17 +194,37 @@ export default function ResourceHeatmapView() {
                             className="pl-9 h-9"
                         />
                     </div>
-                    <Button variant="outline" size="sm" className="h-9 shrink-0">
-                        <Filter className="w-4 h-4 mr-2" />
-                        Filter
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-9">
+                                <Download className="w-4 h-4 mr-2" />
+                                Export Options
+                                <ChevronDown className="w-4 h-4 ml-2 opacity-50" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuLabel className="text-xs">Data Formats</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={exportToCSV} className="cursor-pointer">
+                                <FileText className="w-4 h-4 mr-2 text-slate-500" />
+                                CSV Flat Data
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={exportToExcel} className="cursor-pointer text-green-600 focus:text-green-600 focus:bg-green-50 dark:focus:bg-green-950/50">
+                                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                                Excel 2D Grid
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel className="text-xs">Printable</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={exportToPDF} className="cursor-pointer text-orange-600 focus:text-orange-600 focus:bg-orange-50 dark:focus:bg-orange-950/50">
+                                <Printer className="w-4 h-4 mr-2" />
+                                Save as PDF
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    <Button size="sm" className="h-9 bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 md:flex hidden" onClick={toggleFullscreen}>
+                        {isFullscreen ? <Minimize2 className="w-4 h-4 mr-2" /> : <Maximize2 className="w-4 h-4 mr-2" />}
+                        {isFullscreen ? "Exit Fullscreen" : "Fullscreen Focus"}
                     </Button>
-                    <select
-                        className="pl-3 pr-8 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-md text-sm font-medium focus:ring-2 focus:ring-blue-500 appearance-none h-9 shadow-sm"
-                        value={selectedDay}
-                        onChange={(e) => setSelectedDay(e.target.value)}
-                    >
-                        {["Mon", "Tue", "Wed", "Thu", "Fri"].map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
                 </div>
             </div>
 
@@ -117,21 +242,21 @@ export default function ResourceHeatmapView() {
                                     <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]" />
                                     <span className="text-slate-700 dark:text-slate-300">Available</span>
                                 </div>
-                                <span className="font-semibold">32%</span>
+                                <span className="font-semibold">{availablePct}%</span>
                             </div>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <div className="w-3 h-3 rounded-full bg-blue-500" />
                                     <span className="text-slate-700 dark:text-slate-300">Occupied</span>
                                 </div>
-                                <span className="font-semibold">64%</span>
+                                <span className="font-semibold">{occupiedPct}%</span>
                             </div>
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between opacity-50">
                                 <div className="flex items-center gap-2">
                                     <div className="w-3 h-3 rounded-full bg-orange-400" />
                                     <span className="text-slate-700 dark:text-slate-300">Maintenance</span>
                                 </div>
-                                <span className="font-semibold">4%</span>
+                                <span className="font-semibold">0%</span>
                             </div>
                         </CardContent>
                     </Card>

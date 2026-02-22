@@ -26,11 +26,16 @@ export default function HistoryPage() {
             const { data: profile } = await supabase.from("profiles").select("institution_id").eq("id", user.id).single();
             if (!profile?.institution_id) return;
 
-            const { data } = await supabase
+            const { data, error } = await supabase
                 .from("generated_timetables")
-                .select("id, created_at, is_active")
+                .select("id, created_at, is_active, status, error_message")
                 .eq("institution_id", profile.institution_id)
                 .order("created_at", { ascending: false });
+
+            if (error) {
+                alert("Database Schema Error: Ensure you have added the 'status' column via SQL Migration!\n\n" + error.message);
+                throw error;
+            }
 
             if (data) setHistory(data);
         } catch (err) {
@@ -119,15 +124,24 @@ export default function HistoryPage() {
                         <div className="divide-y divide-slate-100 dark:divide-slate-800">
                             {history.map((record) => (
                                 <div key={record.id} className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                                    <div className="flex items-start sm:items-center gap-4">
-                                        <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 flex items-center justify-center shrink-0">
-                                            <CalendarDays className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                    <div className="flex items-start sm:items-center gap-4 w-full">
+                                        <div className={`w-10 h-10 rounded-full border flex items-center justify-center shrink-0 mt-1 sm:mt-0 ${record.status === 'failed' ? 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800' : 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800'}`}>
+                                            {record.status === 'failed' ? (
+                                                <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                                            ) : (
+                                                <CalendarDays className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                            )}
                                         </div>
-                                        <div>
-                                            <h4 className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                                                Generated Output
-                                                {record.is_active && (
-                                                    <span className="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                        <div className="flex-1 w-full max-w-3xl overflow-hidden">
+                                            <h4 className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2 flex-wrap">
+                                                {record.status === 'failed' ? "Generation Failed" : "Optimal Timetable"}
+                                                {record.status === 'failed' && (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 shrink-0">
+                                                        Error
+                                                    </span>
+                                                )}
+                                                {record.is_active && record.status !== 'failed' && (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 shrink-0">
                                                         Active
                                                     </span>
                                                 )}
@@ -135,17 +149,24 @@ export default function HistoryPage() {
                                             <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
                                                 {format(new Date(record.created_at), "MMMM do, yyyy 'at' h:mm a")}
                                             </p>
+                                            {record.status === 'failed' && record.error_message && (
+                                                <div className="mt-2 text-xs font-mono text-red-600 dark:text-red-400 bg-red-50/50 dark:bg-red-900/10 p-2.5 rounded-lg border border-red-100 dark:border-red-900/30 overflow-x-auto whitespace-pre-wrap max-h-32 overflow-y-auto">
+                                                    {record.error_message}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3 w-full sm:w-auto mt-2 sm:mt-0">
-                                        <Button
-                                            variant="outline"
-                                            className="w-full sm:w-auto"
-                                            onClick={() => router.push(`/dashboard/timetable?id=${record.id}`)}
-                                        >
-                                            <ExternalLink className="w-4 h-4 mr-2" />
-                                            View Timetable
-                                        </Button>
+                                    <div className="flex items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0 shrink-0 justify-end">
+                                        {record.status !== 'failed' && (
+                                            <Button
+                                                variant="outline"
+                                                className="w-full sm:w-auto"
+                                                onClick={() => router.push(`/dashboard/timetable?id=${record.id}`)}
+                                            >
+                                                <ExternalLink className="w-4 h-4 mr-2" />
+                                                View Timetable
+                                            </Button>
+                                        )}
                                         <Button
                                             variant="ghost"
                                             size="icon"
