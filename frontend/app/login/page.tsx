@@ -11,18 +11,45 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+import { createClient } from "@/utils/supabase/client";
+import { useRouter } from "next/navigation";
+
 export default function LoginPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [role, setRole] = useState("faculty");
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [rollNo, setRollNo] = useState("");
+    const router = useRouter();
+    const supabase = createClient();
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
-        // Mock authentication delay
-        setTimeout(() => {
-            // For now, redirect to dashboard regardless of role
-            window.location.href = "/dashboard";
-        }, 1500);
+
+        try {
+            // For now, regardless of role, we authenticate using email/password
+            // If student, we could map rollNo to an email format (e.g. 2024CS012@institute.edu)
+            const activeEmail = role === "student" ? `${rollNo}@institute.edu` : email;
+
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email: activeEmail,
+                password: password,
+            });
+
+            if (error) {
+                alert(error.message);
+                setIsLoading(false);
+                return;
+            }
+
+            // Redirect to dashboard on success
+            router.push("/dashboard");
+            router.refresh(); // Refresh to apply middleware session
+        } catch (err: any) {
+            alert(err.message || "An unexpected error occurred");
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -86,6 +113,8 @@ export default function LoginPage() {
                                             <Input
                                                 id="email"
                                                 type="email"
+                                                value={email}
+                                                onChange={(e) => setEmail(e.target.value)}
                                                 placeholder="name@institute.edu"
                                                 required
                                                 className="bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 focus-visible:ring-blue-500"
@@ -106,6 +135,8 @@ export default function LoginPage() {
                                             <Input
                                                 id="roll"
                                                 type="text"
+                                                value={rollNo}
+                                                onChange={(e) => setRollNo(e.target.value)}
                                                 placeholder="e.g. 2024CS012"
                                                 required
                                                 className="bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 focus-visible:ring-blue-500"
@@ -124,6 +155,8 @@ export default function LoginPage() {
                                     <Input
                                         id="password"
                                         type="password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
                                         placeholder="••••••••"
                                         required
                                         className="bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 focus-visible:ring-blue-500"
