@@ -14,7 +14,7 @@ export default function InstitutionForm({ onSuccess }: { onSuccess: () => void }
     const [startHour, setStartHour] = useState(8);
     const [endHour, setEndHour] = useState(16);
     const [lunchSlot, setLunchSlot] = useState(13);
-    const [maxContinuous, setMaxContinuous] = useState(2);
+    const [maxContinuous, setMaxContinuous] = useState<number | "">(2);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const supabase = createClient();
@@ -69,7 +69,7 @@ export default function InstitutionForm({ onSuccess }: { onSuccess: () => void }
                 days_active: activeDays,
                 time_slots: slots,
                 lunch_slot: lunchSlot,
-                max_continuous_lectures: maxContinuous
+                max_continuous_lectures: maxContinuous === "" ? 2 : maxContinuous
             };
 
             let instId = profile?.institution_id;
@@ -117,8 +117,8 @@ export default function InstitutionForm({ onSuccess }: { onSuccess: () => void }
                             key={day}
                             onClick={() => toggleDay(day)}
                             className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors border ${activeDays.includes(day)
-                                    ? "bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100"
-                                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-slate-950 dark:text-slate-400 dark:border-slate-800 dark:hover:bg-slate-900"
+                                ? "bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100"
+                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-slate-950 dark:text-slate-400 dark:border-slate-800 dark:hover:bg-slate-900"
                                 }`}
                         >
                             {day}
@@ -160,7 +160,7 @@ export default function InstitutionForm({ onSuccess }: { onSuccess: () => void }
                 </div>
                 <div className="space-y-2">
                     <Label>Max Continuous Lectures (Fatigue Limit)</Label>
-                    <Input required type="number" min="1" max="5" value={maxContinuous} onChange={e => setMaxContinuous(parseInt(e.target.value))} />
+                    <Input required type="number" min="1" max="5" value={maxContinuous} onChange={e => setMaxContinuous(e.target.value ? parseInt(e.target.value) : "")} />
                 </div>
             </div>
 
