@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Loader2, Server } from "lucide-react";
+import { Plus, Loader2, Server, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,6 +66,14 @@ export default function RoomForm({ onSuccess }: { onSuccess: () => void }) {
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4 max-w-xl mx-auto border border-slate-200 dark:border-slate-800 p-6 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+            {/* IN-APP USER GUIDE */}
+            <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 p-4 rounded-lg flex gap-3 text-sm text-blue-800 dark:text-blue-200 mb-4">
+                <Info className="w-5 h-5 shrink-0 mt-0.5" />
+                <div>
+                    <strong>Rooms Guide:</strong> Add physical spaces available. Rooms must have accurate capacities so the AI doesn't schedule an 80-student batch in a 30-seater lab. Use specific Hardware Tags like `Computer_Lab` or `Linux_Lab` to map classes to this specific room later.
+                </div>
+            </div>
+
             <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-50 mb-4">Add New Physical Room</h3>
 
             <div className="grid grid-cols-2 gap-4">

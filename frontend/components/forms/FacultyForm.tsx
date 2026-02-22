@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Loader2, Server } from "lucide-react";
+import { Plus, Loader2, Server, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ export default function FacultyForm({ onSuccess }: { onSuccess: () => void }) {
     const [maxHours, setMaxHours] = useState("");
     const [shiftStart, setShiftStart] = useState("8");
     const [shiftEnd, setShiftEnd] = useState("16");
+    const [classTeacher, setClassTeacher] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [existingFaculty, setExistingFaculty] = useState<any[]>([]);
     const supabase = createClient();
@@ -47,12 +48,15 @@ export default function FacultyForm({ onSuccess }: { onSuccess: () => void }) {
                 profile_id: user.id, // Primary Faculty link
                 max_load_hrs: parseInt(maxHours),
                 shift_hours: shiftArray,
-                blocked_slots: []
+                blocked_slots: [],
+                class_teacher_for: classTeacher || null
             });
 
             if (error) throw error;
 
             alert(`Faculty Rules configured!`);
+            setMaxHours("");
+            setClassTeacher("");
             fetchFaculty();
             onSuccess();
         } catch (err: any) {
@@ -63,12 +67,25 @@ export default function FacultyForm({ onSuccess }: { onSuccess: () => void }) {
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4 max-w-xl mx-auto border border-slate-200 dark:border-slate-800 p-6 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-50 mb-4">Configure Global Faculty Rules</h3>
-            <p className="text-xs text-slate-500 mb-4">You are currently setting the constraints for your own AI profile mapping.</p>
+            {/* IN-APP USER GUIDE */}
+            <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 p-4 rounded-lg flex gap-3 text-sm text-blue-800 dark:text-blue-200 mb-4">
+                <Info className="w-5 h-5 shrink-0 mt-0.5" />
+                <div>
+                    <strong>Faculty Constraints Guide:</strong> Configure precise limits for teachers. Setting accurate max load hours prevents burnout. Using 'Class Teacher Priority' ensures a specific faculty is given priority for their assigned batch/division's critical subjects.
+                </div>
+            </div>
 
-            <div className="space-y-2">
-                <Label>Maximum Teach Load (Weekly Hours)</Label>
-                <Input required type="number" min="1" max="40" placeholder="16" value={maxHours} onChange={e => setMaxHours(e.target.value)} />
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-50 mb-4">Configure Faculty Rules</h3>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label>Maximum Teach Load (Weekly Hrs)</Label>
+                    <Input required type="number" min="1" max="40" placeholder="16" value={maxHours} onChange={e => setMaxHours(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                    <Label>Class Teacher For (Optional)</Label>
+                    <Input placeholder="e.g. SY-CSDS-A" value={classTeacher} onChange={e => setClassTeacher(e.target.value)} />
+                </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

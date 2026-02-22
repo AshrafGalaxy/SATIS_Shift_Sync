@@ -13,6 +13,9 @@ import { SolverLoadingGear } from "@/components/ui/svg-illustrations";
 
 import RoomForm from "@/components/forms/RoomForm";
 import FacultyForm from "@/components/forms/FacultyForm";
+import InstitutionForm from "@/components/forms/InstitutionForm";
+import WorkloadForm from "@/components/forms/WorkloadForm";
+import CsvUploadManager from "@/components/forms/CsvUploadManager";
 
 export default function DashboardOverview() {
     const [isMounted, setIsMounted] = useState(false);
@@ -612,22 +615,35 @@ export default function DashboardOverview() {
                             <CardDescription>Upload or modify institutional constraints and capacities.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <Tabs defaultValue="developer" className="w-full">
-                                <TabsList className="w-full justify-start border-b border-slate-200 dark:border-slate-800 rounded-none bg-transparent p-0 h-12">
-                                    <TabsTrigger value="faculty" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">Faculty</TabsTrigger>
-                                    <TabsTrigger value="rooms" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">Rooms</TabsTrigger>
-                                    <TabsTrigger value="constraints" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">Constraints</TabsTrigger>
-                                    <TabsTrigger value="demo_data" className="data-[state=active]:border-b-2 data-[state=active]:border-teal-500 rounded-none h-12 px-6 text-teal-600 dark:text-teal-400">Quick Start: Demo Data</TabsTrigger>
+                            <Tabs defaultValue="global" className="w-full">
+                                <TabsList className="w-full justify-start border-b border-slate-200 dark:border-slate-800 rounded-none bg-transparent p-0 h-12 overflow-x-auto no-scrollbar flex-nowrap shrink-0 whitespace-nowrap">
+                                    <TabsTrigger value="global" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">1. Global Settings</TabsTrigger>
+                                    <TabsTrigger value="csv" className="data-[state=active]:border-b-2 data-[state=active]:border-emerald-500 rounded-none h-12 px-6 font-medium text-emerald-600 dark:text-emerald-400">Bulk CSV Upload</TabsTrigger>
+                                    <TabsTrigger value="rooms" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">2. Rooms</TabsTrigger>
+                                    <TabsTrigger value="faculty" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">3. Faculty</TabsTrigger>
+                                    <TabsTrigger value="workloads" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">4. Workloads</TabsTrigger>
+                                    <TabsTrigger value="demo_data" className="data-[state=active]:border-b-2 data-[state=active]:border-teal-500 rounded-none h-12 px-6 text-teal-600 dark:text-teal-400">Database Tools</TabsTrigger>
                                 </TabsList>
 
-                                <TabsContent value="faculty" className="pt-6">
-                                    <FacultyForm onSuccess={() => alert("Faculty Settings Saved! Check the top dashboard stats to verify.")} />
+                                <TabsContent value="global" className="pt-6">
+                                    <InstitutionForm onSuccess={() => alert("Global Constraints Set!")} />
+                                </TabsContent>
+
+                                <TabsContent value="csv" className="pt-6">
+                                    <CsvUploadManager />
                                 </TabsContent>
 
                                 <TabsContent value="rooms" className="pt-6">
                                     <RoomForm onSuccess={() => alert("Room Added! Check the top dashboard stats to verify.")} />
                                 </TabsContent>
-                                <TabsContent value="constraints" className="pt-6 text-slate-500">Global constraint settings (lunch breaks, max continuous lectures) go here...</TabsContent>
+
+                                <TabsContent value="faculty" className="pt-6">
+                                    <FacultyForm onSuccess={() => alert("Faculty Settings Saved! Check the top dashboard stats to verify.")} />
+                                </TabsContent>
+
+                                <TabsContent value="workloads" className="pt-6">
+                                    <WorkloadForm onSuccess={() => alert("Workload Mapped Successfully!")} />
+                                </TabsContent>
 
                                 <TabsContent value="demo_data" className="pt-6">
                                     <div className="flex flex-col space-y-2">
