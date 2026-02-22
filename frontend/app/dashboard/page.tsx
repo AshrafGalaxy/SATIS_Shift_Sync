@@ -18,6 +18,7 @@ export default function DashboardOverview() {
     const [isMounted, setIsMounted] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationStep, setGenerationStep] = useState(0);
+    const [isDbReady, setIsDbReady] = useState<boolean>(false);
 
     const [stats, setStats] = useState([
         { name: "Total Faculty", value: 0 as number | string, icon: Users, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-500/10" },
@@ -56,6 +57,8 @@ export default function DashboardOverview() {
                     .order("created_at", { ascending: false })
                     .limit(1)
                     .single();
+
+                setIsDbReady((facultyCount ?? 0) > 0 && (roomCount ?? 0) > 0);
 
                 setStats([
                     { name: "Total Faculty", value: facultyCount || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-500/10" },
@@ -342,6 +345,40 @@ export default function DashboardOverview() {
 
     // JSON parsing bypass code left unchanged below 
     const [isSeeding, setIsSeeding] = useState(false);
+    const [isClearing, setIsClearing] = useState(false);
+
+    const clearDatabase = async () => {
+        setIsClearing(true);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error("Authentication missing. Please log in.");
+
+            const { data: profile } = await supabase.from("profiles").select("institution_id").eq("id", user.id).single();
+            const instId = profile?.institution_id;
+
+            if (instId) {
+                await supabase.from("generated_timetables").delete().eq("institution_id", instId);
+                await supabase.from("rooms").delete().eq("institution_id", instId);
+                await supabase.from("institutions").delete().eq("id", instId);
+                await supabase.from("profiles").update({ institution_id: null }).eq("id", user.id);
+            }
+
+            const { data: faculties } = await supabase.from("faculty_settings").select("id").eq("profile_id", user.id);
+            if (faculties && faculties.length > 0) {
+                for (const f of faculties) {
+                    await supabase.from("workloads").delete().eq("faculty_id", f.id);
+                }
+                await supabase.from("faculty_settings").delete().eq("profile_id", user.id);
+            }
+
+            alert("Database Nuked Successfully! All testing records have been erased.");
+            window.location.reload();
+        } catch (err: any) {
+            console.error("Clearing Error:", err);
+            alert("Clearing failed: " + (err.message || "Unknown error"));
+        }
+        setIsClearing(false);
+    };
 
     const seedDatabase = async () => {
         setIsSeeding(true);
@@ -586,12 +623,22 @@ export default function DashboardOverview() {
                                         />
                                         <Button
                                             onClick={seedDatabase}
-                                            disabled={isSeeding}
+                                            disabled={isSeeding || isClearing}
                                             className="w-full mt-4 bg-teal-600 hover:bg-teal-700 text-white"
                                         >
                                             <Database className="w-4 h-4 mr-2" />
                                             {isSeeding ? "Translating Editor to SQL..." : "Step 1: Convert to Real SQL Rows (Seed DB)"}
                                         </Button>
+                                        <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+                                            <Button
+                                                onClick={clearDatabase}
+                                                disabled={isSeeding || isClearing}
+                                                variant="outline"
+                                                className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200 dark:border-red-900/30"
+                                            >
+                                                {isClearing ? "Nuking Database..." : "Danger: Nuke Database & Start Fresh"}
+                                            </Button>
+                                        </div>
                                     </div>
                                 </TabsContent>
                             </Tabs>
@@ -627,10 +674,11 @@ export default function DashboardOverview() {
                                         <Button
                                             size="lg"
                                             onClick={startGeneration}
-                                            className="w-full h-16 text-lg rounded-2xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-xl shadow-blue-600/25 group transition-all duration-300 hover:shadow-blue-600/40"
+                                            disabled={!isDbReady}
+                                            className={`w-full h-16 text-lg rounded-2xl text-white shadow-xl transition-all duration-300 group ${isDbReady ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-blue-600/25 hover:shadow-blue-600/40" : "bg-slate-400 dark:bg-slate-800 cursor-not-allowed shadow-none"}`}
                                         >
-                                            <Play className="w-5 h-5 mr-3 fill-white/20 group-hover:fill-white/40 transition-all" />
-                                            Generate Smart Timetable (from DB)
+                                            <Play className={`w-5 h-5 mr-3 transition-all ${isDbReady ? "fill-white/20 group-hover:fill-white/40" : "fill-white/10"}`} />
+                                            {isDbReady ? "Generate Smart Timetable (from DB)" : "Complete Setup First (0 Rooms or Faculty)"}
                                         </Button>
                                         <p className="text-xs text-slate-500 mt-4 flex items-center gap-1.5">
                                             <Clock className="w-3.5 h-3.5" />
