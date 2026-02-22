@@ -19,21 +19,95 @@ export default function DashboardOverview() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationStep, setGenerationStep] = useState(0);
 
-    const startGeneration = () => {
+    const startGeneration = async () => {
         setIsGenerating(true);
-        setGenerationStep(0);
+        setGenerationStep(0); // Parsing
 
-        // Simulate CP-SAT Solver states
-        setTimeout(() => setGenerationStep(1), 2000); // Resolving room conflicts
-        setTimeout(() => setGenerationStep(2), 5000); // Finalizing shifts
-        setTimeout(() => {
-            setGenerationStep(3); // Complete
-            setTimeout(() => {
+        try {
+            // Hardcoded payload showcasing the Edge-Case advanced constraints
+            const mockPayload = {
+                "college_settings": {
+                    "days_active": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+                    "time_slots": [8, 9, 10, 11, 12, 13, 14, 15, 16],
+                    "lunch_slot": 13,
+                    "max_continuous_lectures": 2,
+                    "custom_rules": []
+                },
+                "rooms_config": {
+                    "rooms": [
+                        { "id": "D201", "type": "Classroom", "capacity": 80, "tags": ["Projector"] },
+                        { "id": "L101", "type": "Laboratory", "capacity": 30, "tags": ["Linux_Lab", "Projector"] }
+                    ]
+                },
+                "faculty": [
+                    {
+                        "id": "F001",
+                        "name": "Dr. Sharma",
+                        "shift": [8, 9, 10, 11, 12, 13, 14, 15],
+                        "max_load_hrs": 16,
+                        "blocked_slots": [
+                            { "day": "Mon", "time": 8 }
+                        ],
+                        "class_teacher_for": "Div_A",
+                        "workload": [
+                            {
+                                "id": "EVT_1",
+                                "type": "Theory",
+                                "subject": "CS301",
+                                "target_groups": ["Div_A", "Div_B"],
+                                "hours": 3,
+                                "consecutive_hours": 1,
+                                "required_tags": ["Projector"]
+                            },
+                            {
+                                "id": "EVT_2",
+                                "type": "Practical",
+                                "subject": "CS301_LAB",
+                                "target_groups": ["Batch_A1"],
+                                "hours": 2,
+                                "consecutive_hours": 2,
+                                "required_tags": ["Linux_Lab"]
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            setGenerationStep(1); // Calling API
+
+            const response = await fetch("http://localhost:8000/api/v1/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(mockPayload)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error("Solver Error:", errorData);
+                alert("Generation Failed: " + JSON.stringify(errorData.detail || errorData));
                 setIsGenerating(false);
-                // Redirect or show success toast in real app
-                window.location.href = "/dashboard/timetable";
-            }, 1500);
-        }, 8000);
+                return;
+            }
+
+            const data = await response.json();
+            console.log("Optimal Timetable Matrix:", data);
+
+            setGenerationStep(2); // Optimizing
+
+            setTimeout(() => {
+                setGenerationStep(3); // Complete
+                setTimeout(() => {
+                    setIsGenerating(false);
+                    // In real app, we would save this `data.schedule` to Supabase here
+                    alert(`Success! Generated ${data.total_classes} class mappings. Check Browser Console for array.`);
+                }, 1500);
+            }, 1000);
+
+        } catch (error) {
+            console.error("Network Error:", error);
+            alert("Failed to connect to Python Backend Engine.");
+            setIsGenerating(false);
+        }
     };
 
     return (
