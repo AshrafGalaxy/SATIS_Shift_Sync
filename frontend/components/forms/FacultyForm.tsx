@@ -36,7 +36,7 @@ export default function FacultyForm({ onSuccess }: { onSuccess: () => void }) {
             if (!user) throw new Error("Not logged in");
 
             const { data: profile } = await supabase.from("profiles").select("institution_id").eq("id", user.id).single();
-            if (!profile?.institution_id) throw new Error("No institution found");
+            if (!profile?.institution_id) throw new Error("⚠️ Missing Global Settings. Please complete Step 1 (Global Settings tab) to initialize your college before adding faculty.");
 
             // Compute shift array (e.g. 8 to 16 -> [8,9,10,11,12,13,14,15,16])
             const start = parseInt(shiftStart);
