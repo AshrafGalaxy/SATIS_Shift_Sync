@@ -504,7 +504,7 @@ export default function DashboardOverview() {
                     name: `Faculty ${facSetting.id.slice(0, 4)}`, // Temporarily use ID mapping
                     shift: facSetting.shift_hours,
                     max_load_hrs: facSetting.max_load_hrs,
-                    blocked_slots: facSetting.blocked_slots,
+                    blocked_slots: (facSetting.blocked_slots || []).filter((s: any) => s.day && s.time !== undefined),
                     class_teacher_for: facSetting.class_teacher_for,
                     workload: workloads?.map(w => ({
                         id: w.id.slice(0, 8),
