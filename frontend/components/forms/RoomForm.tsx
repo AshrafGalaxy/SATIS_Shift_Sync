@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Loader2, Server } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,22 @@ export default function RoomForm({ onSuccess }: { onSuccess: () => void }) {
     const [capacity, setCapacity] = useState("");
     const [tags, setTags] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [existingRooms, setExistingRooms] = useState<any[]>([]);
     const supabase = createClient();
+
+    const fetchRooms = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: profile } = await supabase.from("profiles").select("institution_id").eq("id", user.id).single();
+        if (profile?.institution_id) {
+            const { data } = await supabase.from("rooms").select("*").eq("institution_id", profile.institution_id).order("created_at", { ascending: false });
+            if (data) setExistingRooms(data);
+        }
+    };
+
+    useEffect(() => {
+        fetchRooms();
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -41,6 +56,7 @@ export default function RoomForm({ onSuccess }: { onSuccess: () => void }) {
             setName("");
             setCapacity("");
             setTags("");
+            fetchRooms();
             onSuccess();
         } catch (err: any) {
             alert(err.message || "Failed to add room");
@@ -85,6 +101,26 @@ export default function RoomForm({ onSuccess }: { onSuccess: () => void }) {
                 {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
                 Save Room constraint
             </Button>
+
+            {existingRooms.length > 0 && (
+                <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800">
+                    <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                        <Server className="w-4 h-4 text-emerald-500" />
+                        Live Database Records ({existingRooms.length})
+                    </h4>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                        {existingRooms.map((r, i) => (
+                            <div key={i} className="flex justify-between items-center bg-white dark:bg-slate-950 p-3 rounded-lg border border-slate-200 dark:border-slate-800 text-sm">
+                                <span className="font-semibold text-slate-800 dark:text-slate-200">{r.name}</span>
+                                <div className="flex gap-3 text-slate-500 text-xs">
+                                    <span>{r.type}</span>
+                                    <span>Cap: {r.capacity}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </form>
     );
 }

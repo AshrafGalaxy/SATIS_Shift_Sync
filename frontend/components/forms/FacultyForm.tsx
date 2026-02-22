@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Loader2, Server } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,19 @@ export default function FacultyForm({ onSuccess }: { onSuccess: () => void }) {
     const [shiftStart, setShiftStart] = useState("8");
     const [shiftEnd, setShiftEnd] = useState("16");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [existingFaculty, setExistingFaculty] = useState<any[]>([]);
     const supabase = createClient();
+
+    const fetchFaculty = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase.from("faculty_settings").select("*").eq("profile_id", user.id).order("created_at", { ascending: false });
+        if (data) setExistingFaculty(data);
+    };
+
+    useEffect(() => {
+        fetchFaculty();
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -41,6 +53,7 @@ export default function FacultyForm({ onSuccess }: { onSuccess: () => void }) {
             if (error) throw error;
 
             alert(`Faculty Rules configured!`);
+            fetchFaculty();
             onSuccess();
         } catch (err: any) {
             alert(err.message || "Failed to add faculty settings");
@@ -73,6 +86,26 @@ export default function FacultyForm({ onSuccess }: { onSuccess: () => void }) {
                 {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
                 Save Personal Constraints
             </Button>
+
+            {existingFaculty.length > 0 && (
+                <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800">
+                    <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                        <Server className="w-4 h-4 text-emerald-500" />
+                        Live Database Records ({existingFaculty.length})
+                    </h4>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                        {existingFaculty.map((f, i) => (
+                            <div key={i} className="flex flex-col bg-white dark:bg-slate-950 p-3 rounded-lg border border-slate-200 dark:border-slate-800 text-sm">
+                                <span className="font-semibold text-slate-800 dark:text-slate-200">Rule Set {existingFaculty.length - i}</span>
+                                <div className="flex gap-3 text-slate-500 text-xs mt-1">
+                                    <span>Max Hrs: {f.max_load_hrs}</span>
+                                    <span>Shift: {f.shift_hours?.[0]}:00 - {f.shift_hours?.[f.shift_hours.length - 1] + 1}:00</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </form>
     );
 }
