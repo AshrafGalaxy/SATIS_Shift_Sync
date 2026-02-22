@@ -210,7 +210,8 @@ export default function DashboardOverview() {
             const { data: inst } = await supabase.from("institutions").select("*").eq("id", instId).single();
             const { data: rooms } = await supabase.from("rooms").select("*").eq("institution_id", instId);
             const { data: facSetting } = await supabase.from("faculty_settings").select("*").eq("profile_id", user.id).single();
-            const { data: workloads } = await supabase.from("workloads").select("*").eq("faculty_id", facSetting?.id);
+            if (!facSetting) throw new Error("No Faculty Configuration found! Please complete the 'Faculty' tab setup before generating.");
+            const { data: workloads } = await supabase.from("workloads").select("*").eq("faculty_id", facSetting.id);
 
             // Construct the Python Engine Payload dynamically from SQL Result!
             const dynamicPayload = {
