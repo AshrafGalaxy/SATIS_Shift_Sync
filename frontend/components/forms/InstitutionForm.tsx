@@ -10,6 +10,7 @@ import { createClient } from "@/utils/supabase/client";
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function InstitutionForm({ onSuccess }: { onSuccess: () => void }) {
+    const [name, setName] = useState("ShiftSync College");
     const [activeDays, setActiveDays] = useState<string[]>(["Mon", "Tue", "Wed", "Thu", "Fri"]);
     const [startHour, setStartHour] = useState(8);
     const [endHour, setEndHour] = useState(16);
@@ -26,6 +27,7 @@ export default function InstitutionForm({ onSuccess }: { onSuccess: () => void }
         if (profile?.institution_id) {
             const { data } = await supabase.from("institutions").select("*").eq("id", profile.institution_id).single();
             if (data) {
+                setName(data.name || "ShiftSync College");
                 setActiveDays(data.days_active);
                 if (data.time_slots && data.time_slots.length > 0) {
                     setStartHour(Math.min(...data.time_slots));
@@ -65,7 +67,7 @@ export default function InstitutionForm({ onSuccess }: { onSuccess: () => void }
             }
 
             const payload = {
-                name: "ShiftSync College", // Generic name for now
+                name: name,
                 days_active: activeDays,
                 time_slots: slots,
                 lunch_slot: lunchSlot,
@@ -109,6 +111,11 @@ export default function InstitutionForm({ onSuccess }: { onSuccess: () => void }
             </h3>
 
             <div className="space-y-3">
+                <Label>Institution / College Name</Label>
+                <Input required placeholder="e.g. Oxford University" value={name} onChange={e => setName(e.target.value)} />
+            </div>
+
+            <div className="space-y-3 pt-2">
                 <Label>Active Working Days</Label>
                 <div className="flex flex-wrap gap-2">
                     {DAYS_OF_WEEK.map(day => (

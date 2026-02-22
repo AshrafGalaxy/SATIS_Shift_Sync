@@ -29,10 +29,10 @@ export default function ResourceHeatmapView() {
             setIsLoading(true);
             try {
                 const { data: { user } } = await supabase.auth.getUser();
-                if (!user) return;
+                if (!user) throw new Error("Not logged in");
 
                 const { data: profile } = await supabase.from("profiles").select("institution_id").eq("id", user.id).single();
-                if (!profile?.institution_id) return;
+                if (!profile?.institution_id) throw new Error("No institution");
 
                 // Fetch physical rooms
                 const { data: dbRooms } = await supabase.from("rooms").select("*").eq("institution_id", profile.institution_id);
@@ -51,9 +51,10 @@ export default function ResourceHeatmapView() {
                     setMatrices(latestTimetable.matrix_data.schedule);
                 }
             } catch (err) {
-                console.error("Heatmap fetch error:", err);
+                console.warn("Heatmap fetch warning:", err);
+            } finally {
+                setIsLoading(false);
             }
-            setIsLoading(false);
         };
 
         fetchHeatmapData();
@@ -167,8 +168,18 @@ export default function ResourceHeatmapView() {
                                     {isLoading ? (
                                         <tr>
                                             <td colSpan={10} className="py-20 text-center text-slate-500">
-                                                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 opacity-50" />
-                                                Fetching Live Infrastructure Matrix API...
+                                                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 opacity-50 text-blue-600" />
+                                                Loading Live Infrastructure Matrix...
+                                            </td>
+                                        </tr>
+                                    ) : filteredRooms.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={10} className="py-20 text-center text-slate-500">
+                                                <div className="w-12 h-12 bg-slate-100 dark:bg-slate-900 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                    <Map className="w-6 h-6 text-slate-400" />
+                                                </div>
+                                                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">No Data Available</h3>
+                                                <p className="text-sm mt-1">Please ensure you have generated a timetable or added physical rooms.</p>
                                             </td>
                                         </tr>
                                     ) : filteredRooms.map((room) => (
@@ -209,7 +220,7 @@ export default function ResourceHeatmapView() {
                         </div>
                         {filteredRooms.length === 0 && !isLoading && (
                             <div className="p-8 text-center text-slate-500">
-                                No rooms found matching "{searchTerm}"
+                                No rooms found matching &quot;{searchTerm}&quot;
                             </div>
                         )}
                     </div>

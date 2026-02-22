@@ -657,7 +657,7 @@ export default function DashboardOverview() {
                                             Import Pre-configured Demo Environment
                                         </label>
                                         <p className="text-xs text-slate-500 mb-2">
-                                            To easily test the AI System, you can inject this pre-written block of constraints describing a complex "Computer Science" schedule directly into the blank Database.
+                                            To easily test the AI System, you can inject this pre-written block of constraints describing a complex &quot;Computer Science&quot; schedule directly into the blank Database.
                                             Press <strong className="text-teal-600">Step 1</strong> below, and then press the large <strong>Generate Smart Timetable</strong> button on the right!
                                         </p>
                                         <textarea
