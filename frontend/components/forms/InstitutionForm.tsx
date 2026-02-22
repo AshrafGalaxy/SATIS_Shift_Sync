@@ -85,7 +85,17 @@ export default function InstitutionForm({ onSuccess }: { onSuccess: () => void }
                 const { data: newInst, error: iErr } = await supabase.from("institutions").insert(payload).select().single();
                 if (iErr) throw iErr;
                 instId = newInst.id;
-                await supabase.from("profiles").update({ institution_id: instId }).eq("id", user.id);
+                const { data: hasProfile } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle();
+                if (!hasProfile) {
+                    await supabase.from("profiles").insert({
+                        id: user.id,
+                        full_name: user.email || "ShiftSync Admin",
+                        role: "admin",
+                        institution_id: instId
+                    });
+                } else {
+                    await supabase.from("profiles").update({ institution_id: instId }).eq("id", user.id);
+                }
             }
 
             alert(`Global College Settings saved successfully!`);

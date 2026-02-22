@@ -1,0 +1,167 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { format } from "date-fns";
+import { Trash2, AlertTriangle, Loader2, CalendarDays, ExternalLink, Clock, History } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardContent, CardTitle, CardDescription } from "@/components/ui/card";
+import { createClient } from "@/utils/supabase/client";
+
+export default function HistoryPage() {
+    const [history, setHistory] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+    const [isClearingAll, setIsClearingAll] = useState(false);
+
+    const router = useRouter();
+    const supabase = createClient();
+
+    const fetchHistory = async () => {
+        setIsLoading(true);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            const { data: profile } = await supabase.from("profiles").select("institution_id").eq("id", user.id).single();
+            if (!profile?.institution_id) return;
+
+            const { data } = await supabase
+                .from("generated_timetables")
+                .select("id, created_at, is_active")
+                .eq("institution_id", profile.institution_id)
+                .order("created_at", { ascending: false });
+
+            if (data) setHistory(data);
+        } catch (err) {
+            console.error("History fetch error:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchHistory();
+    }, []);
+
+    const deleteTimetable = async (id: string) => {
+        if (!confirm("Are you sure you want to delete this specific timetable generation?")) return;
+        setIsDeletingId(id);
+        try {
+            const { error } = await supabase.from("generated_timetables").delete().eq("id", id);
+            if (error) throw error;
+            setHistory(history.filter(t => t.id !== id));
+        } catch (err: any) {
+            alert("Failed to delete: " + err.message);
+        }
+        setIsDeletingId(null);
+    };
+
+    const clearAllHistory = async () => {
+        if (!confirm("WARNING: Are you absolutely sure you want to permanently delete ALL past timetable generations? This cannot be undone.")) return;
+        setIsClearingAll(true);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            const { data: profile } = await supabase.from("profiles").select("institution_id").eq("id", user?.id).single();
+            if (!profile?.institution_id) return;
+
+            const { error } = await supabase.from("generated_timetables").delete().eq("institution_id", profile.institution_id);
+            if (error) throw error;
+
+            setHistory([]);
+        } catch (err: any) {
+            alert("Failed to clear history: " + err.message);
+        }
+        setIsClearingAll(false);
+    };
+
+    return (
+        <div className="space-y-6 animate-in fade-in duration-500 max-w-5xl mx-auto">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">Generation History</h1>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">View and manage your past AI timeline generations.</p>
+                </div>
+                {history.length > 0 && (
+                    <Button variant="destructive" size="sm" onClick={clearAllHistory} disabled={isClearingAll}>
+                        {isClearingAll ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <AlertTriangle className="w-4 h-4 mr-2" />}
+                        Clear All History
+                    </Button>
+                )}
+            </div>
+
+            <Card className="border-slate-200/60 dark:border-slate-800/60 shadow-sm bg-white dark:bg-slate-950">
+                <CardHeader className="border-b border-slate-100 dark:border-slate-800/50">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                        <Clock className="w-5 h-5 text-blue-600" />
+                        Timeline Records
+                    </CardTitle>
+                    <CardDescription>All algorithmic matrix solutions sorted by newest first.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                    {isLoading ? (
+                        <div className="p-12 text-center text-slate-500">
+                            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 opacity-50 text-blue-600" />
+                            Loading your timeline...
+                        </div>
+                    ) : history.length === 0 ? (
+                        <div className="p-12 text-center">
+                            <div className="w-16 h-16 bg-slate-100 dark:bg-slate-900 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <History className="w-8 h-8 text-slate-400" />
+                            </div>
+                            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-50">No Generations Yet</h3>
+                            <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">You haven't run the Smart Timetable AI yet. Go to the Overview tab to trigger a generation!</p>
+                            <Button className="mt-6" onClick={() => router.push('/dashboard')}>
+                                Go to Overview
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {history.map((record) => (
+                                <div key={record.id} className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                                    <div className="flex items-start sm:items-center gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 flex items-center justify-center shrink-0">
+                                            <CalendarDays className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                        </div>
+                                        <div>
+                                            <h4 className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                                                Generated Output
+                                                {record.is_active && (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                                        Active
+                                                    </span>
+                                                )}
+                                            </h4>
+                                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                                                {format(new Date(record.created_at), "MMMM do, yyyy 'at' h:mm a")}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 w-full sm:w-auto mt-2 sm:mt-0">
+                                        <Button
+                                            variant="outline"
+                                            className="w-full sm:w-auto"
+                                            onClick={() => router.push(`/dashboard/timetable?id=${record.id}`)}
+                                        >
+                                            <ExternalLink className="w-4 h-4 mr-2" />
+                                            View Timetable
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 shrink-0"
+                                            onClick={() => deleteTimetable(record.id)}
+                                            disabled={isDeletingId === record.id}
+                                        >
+                                            {isDeletingId === record.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+    );
+}

@@ -16,7 +16,13 @@ const mapMilitaryTo12Hour = (hour: number) => {
     return `${h.toString().padStart(2, '0')}:00 ${period}`;
 };
 
-export default function MasterTimetableView() {
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
+export function MasterTimetableView() {
+    const searchParams = useSearchParams();
+    const targetId = searchParams.get("id");
+
     const [activeFilter, setActiveFilter] = useState("All Divisions");
     const [availableFilters, setAvailableFilters] = useState<string[]>(["All Divisions"]);
     const [slots, setSlots] = useState<any[]>([]);
@@ -33,13 +39,18 @@ export default function MasterTimetableView() {
                 const { data: profile } = await supabase.from("profiles").select("institution_id").eq("id", user.id).single();
                 if (!profile?.institution_id) throw new Error("No institution");
 
-                const { data: latestTimetable } = await supabase
+                let query = supabase
                     .from("generated_timetables")
                     .select("matrix_data")
-                    .eq("institution_id", profile.institution_id)
-                    .order("created_at", { ascending: false })
-                    .limit(1)
-                    .single();
+                    .eq("institution_id", profile.institution_id);
+
+                if (targetId) {
+                    query = query.eq("id", targetId);
+                } else {
+                    query = query.order("created_at", { ascending: false }).limit(1);
+                }
+
+                const { data: latestTimetable } = await query.single();
 
                 if (latestTimetable && latestTimetable.matrix_data && latestTimetable.matrix_data.schedule) {
                     // Map Python generic array back into our UI grid system
@@ -204,5 +215,18 @@ export default function MasterTimetableView() {
                 )}
             </div>
         </div>
+    );
+}
+
+export default function MasterTimetablePage() {
+    return (
+        <Suspense fallback={
+            <div className="h-[60vh] flex flex-col items-center justify-center text-slate-500">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 opacity-50 text-blue-600" />
+                Initializing Matrix Renderer...
+            </div>
+        }>
+            <MasterTimetableView />
+        </Suspense>
     );
 }

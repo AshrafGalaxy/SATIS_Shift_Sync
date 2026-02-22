@@ -15,7 +15,8 @@ import {
     Menu,
     X,
     UserCircle,
-    LogOut
+    LogOut,
+    History
 } from "lucide-react";
 
 import { createClient } from "@/utils/supabase/client";
@@ -29,6 +30,7 @@ const sidebarLinks = [
     { name: "Master Timetable", href: "/dashboard/timetable", icon: CalendarDays },
     { name: "Resource Heatmap", href: "/dashboard/resources", icon: Map },
     { name: "Faculty & Staff", href: "/dashboard/faculty", icon: Users },
+    { name: "Generation History", href: "/dashboard/history", icon: History },
     { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
