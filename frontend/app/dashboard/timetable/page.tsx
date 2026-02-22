@@ -1,25 +1,66 @@
 "use client";
 
-import { useState } from "react";
-import { Filter, Download, Plus, ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Filter, Download, Plus, ChevronLeft, ChevronRight, Maximize2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { createClient } from "@/utils/supabase/client";
 
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-const TIMES = ["08:00 AM", "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM"];
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+const TIMES = [8, 9, 10, 11, 12, 13, 14, 15, 16];
 
-// Dummy data representing generated slots
-const mockSlots = [
-    { day: "Monday", time: "08:00 AM", subject: "Data Structures", faculty: "Dr. Smith", room: "Lab 1", division: "A", type: "lab" },
-    { day: "Monday", time: "09:00 AM", subject: "Data Structures", faculty: "Dr. Smith", room: "Lab 1", division: "A", type: "lab" },
-    { day: "Monday", time: "10:00 AM", subject: "Operating Systems", faculty: "Prof. Johnson", room: "Room 102", division: "A", type: "theory" },
-    { day: "Tuesday", time: "11:00 AM", subject: "Computer Networks", faculty: "Dr. Alan", room: "Room 204", division: "B", type: "theory" },
-    { day: "Wednesday", time: "01:00 PM", subject: "AI", faculty: "Dr. Turing", room: "Room 305", division: "C", type: "theory" },
-];
+const mapMilitaryTo12Hour = (hour: number) => {
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const h = hour % 12 || 12;
+    return `${h.toString().padStart(2, '0')}:00 ${period}`;
+};
 
 export default function MasterTimetableView() {
     const [activeFilter, setActiveFilter] = useState("All Divisions");
+    const [slots, setSlots] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const supabase = createClient();
+
+    useEffect(() => {
+        const fetchLatestTimetable = async () => {
+            setIsLoading(true);
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) return; // not logged in
+
+                const { data: profile } = await supabase.from("profiles").select("institution_id").eq("id", user.id).single();
+                if (!profile?.institution_id) return;
+
+                const { data: latestTimetable } = await supabase
+                    .from("generated_timetables")
+                    .select("matrix_data")
+                    .eq("institution_id", profile.institution_id)
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .single();
+
+                if (latestTimetable && latestTimetable.matrix_data && latestTimetable.matrix_data.schedule) {
+                    // Map Python generic array back into our UI grid system
+                    const mappedSlots = latestTimetable.matrix_data.schedule.map((entry: any) => ({
+                        day: entry.day, // e.g. "Mon"
+                        time: entry.slot, // e.g. 8
+                        subject: entry.subject,
+                        faculty: entry.faculty_id, // we might want to join name later, using ID for now
+                        room: entry.room,
+                        division: entry.target_group,
+                        type: entry.subject.includes("LAB") ? "lab" : "theory"
+                    }));
+                    setSlots(mappedSlots);
+                }
+            } catch (err) {
+                console.error("Error fetching timetable:", err);
+            }
+            setIsLoading(false);
+        };
+
+        fetchLatestTimetable();
+    }, []);
 
     return (
         <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col pt-2 animate-in fade-in duration-500">
@@ -65,7 +106,7 @@ export default function MasterTimetableView() {
                         </div>
                         {TIMES.map((time) => (
                             <div key={time} className="flex-1 min-w-[140px] border-r border-slate-200 dark:border-slate-800 p-3 text-center font-semibold text-xs text-slate-700 dark:text-slate-300">
-                                {time}
+                                {mapMilitaryTo12Hour(time)}
                             </div>
                         ))}
                     </div>
@@ -84,8 +125,8 @@ export default function MasterTimetableView() {
                                 {/* Slots Wrapper */}
                                 <div className="flex flex-1 relative">
                                     {TIMES.map((time) => {
-                                        const slot = mockSlots.find(s => s.day === day && s.time === time);
-                                        const isLunch = time === "12:00 PM";
+                                        const slot = slots.find(s => s.day === day && s.time === time && (activeFilter === "All Divisions" || `Division ${s.division}` === activeFilter));
+                                        const isLunch = time === 13;
 
                                         if (isLunch) {
                                             return (
@@ -97,10 +138,14 @@ export default function MasterTimetableView() {
 
                                         return (
                                             <div key={time} className="flex-1 min-w-[140px] border-r border-slate-100 dark:border-slate-800/50 p-1.5 relative group/slot">
-                                                {slot ? (
+                                                {isLoading ? (
+                                                    <div className="w-full h-full flex justify-center items-center">
+                                                        <div className="w-4 h-4 rounded-full border-2 border-slate-200 dark:border-slate-800 border-t-slate-400 dark:border-t-slate-500 animate-spin" />
+                                                    </div>
+                                                ) : slot ? (
                                                     <div className={`h-full w-full rounded-md p-2 flex flex-col justify-between border cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md ${slot.type === 'lab'
-                                                            ? 'bg-teal-50 dark:bg-teal-500/10 border-teal-200 dark:border-teal-500/20 hover:border-teal-300 dark:hover:border-teal-500/40'
-                                                            : 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 hover:border-blue-300 dark:hover:border-blue-500/40'
+                                                        ? 'bg-teal-50 dark:bg-teal-500/10 border-teal-200 dark:border-teal-500/20 hover:border-teal-300 dark:hover:border-teal-500/40'
+                                                        : 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 hover:border-blue-300 dark:hover:border-blue-500/40'
                                                         }`}>
                                                         <div>
                                                             <div className="flex justify-between items-start mb-1">
@@ -114,8 +159,8 @@ export default function MasterTimetableView() {
                                                             </p>
                                                         </div>
                                                         <div className="mt-2 flex items-center gap-1">
-                                                            <div className="w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden shrink-0">
-                                                                {/* Faculty Avatar Mock */}
+                                                            <div className="w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-700 flex justify-center items-center overflow-hidden shrink-0">
+                                                                <span className="text-[8px]">{slot.faculty?.charAt(0)}</span>
                                                             </div>
                                                             <p className="text-[10px] text-slate-600 dark:text-slate-400 font-medium truncate">
                                                                 {slot.faculty}

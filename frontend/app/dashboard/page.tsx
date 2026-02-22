@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, FileText, CheckCircle2, Clock, Upload, Users, Building, GraduationCap, Database } from "lucide-react";
+import { Play, FileText, CheckCircle2, Clock, Upload, Users, Building, GraduationCap, Database, Loader2 } from "lucide-react";
 
 import { createClient } from "@/utils/supabase/client";
 
@@ -11,15 +11,65 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SolverLoadingGear } from "@/components/ui/svg-illustrations";
 
-const stats = [
-    { name: "Total Faculty", value: "142", icon: Users, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-500/10" },
-    { name: "Available Rooms", value: "86", icon: Building, color: "text-purple-500", bg: "bg-purple-50 dark:bg-purple-500/10" },
-    { name: "Active Batches", value: "48", icon: GraduationCap, color: "text-teal-500", bg: "bg-teal-50 dark:bg-teal-500/10" },
-];
+import RoomForm from "@/components/forms/RoomForm";
+import FacultyForm from "@/components/forms/FacultyForm";
 
 export default function DashboardOverview() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationStep, setGenerationStep] = useState(0);
+
+    const [stats, setStats] = useState([
+        { name: "Total Faculty", value: 0 as number | string, icon: Users, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-500/10" },
+        { name: "Available Rooms", value: 0 as number | string, icon: Building, color: "text-purple-500", bg: "bg-purple-50 dark:bg-purple-500/10" },
+        { name: "Active Batches", value: 0 as number | string, icon: GraduationCap, color: "text-teal-500", bg: "bg-teal-50 dark:bg-teal-500/10" },
+    ]);
+    const [lastGenerationDate, setLastGenerationDate] = useState<string | null>(null);
+
+    const supabase = createClient();
+
+    useEffect(() => {
+        const fetchDashboardStats = async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) return;
+
+                const { data: profile } = await supabase.from("profiles").select("institution_id").eq("id", user.id).single();
+                if (!profile?.institution_id) return;
+
+                const instId = profile.institution_id;
+
+                // Fetch real counts
+                const { count: facultyCount } = await supabase.from("faculty_settings").select("*", { count: "exact", head: true });
+                const { count: roomCount } = await supabase.from("rooms").select("*", { count: "exact", head: true }).eq("institution_id", instId);
+                const { count: workloadsCount } = await supabase.from("workloads").select("*", { count: "exact", head: true });
+
+                // Get last generation time
+                const { data: latestTs } = await supabase
+                    .from("generated_timetables")
+                    .select("created_at")
+                    .eq("institution_id", instId)
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .single();
+
+                setStats([
+                    { name: "Total Faculty", value: facultyCount || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-500/10" },
+                    { name: "Available Rooms", value: roomCount || 0, icon: Building, color: "text-purple-500", bg: "bg-purple-50 dark:bg-purple-500/10" },
+                    { name: "Total Workloads", value: workloadsCount || 0, icon: GraduationCap, color: "text-teal-500", bg: "bg-teal-50 dark:bg-teal-500/10" },
+                ]);
+
+                if (latestTs) {
+                    const date = new Date(latestTs.created_at);
+                    setLastGenerationDate(date.toLocaleString());
+                }
+
+            } catch (err) {
+                console.error("Failed to load stats", err);
+            }
+        };
+
+        fetchDashboardStats();
+    }, []);
 
     const [jsonPayload, setJsonPayload] = useState(JSON.stringify({
         "college_settings": {
@@ -69,7 +119,7 @@ export default function DashboardOverview() {
         ]
     }, null, 4));
 
-    const supabase = createClient();
+    // JSON parsing bypass code left unchanged below 
     const [isSeeding, setIsSeeding] = useState(false);
 
     const seedDatabase = async () => {
@@ -283,17 +333,12 @@ export default function DashboardOverview() {
                                 </TabsList>
 
                                 <TabsContent value="faculty" className="pt-6">
-                                    <div className="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-lg p-10 flex flex-col items-center justify-center text-center">
-                                        <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center mb-4">
-                                            <Upload className="w-6 h-6 text-slate-500 dark:text-slate-400" />
-                                        </div>
-                                        <h3 className="font-medium text-slate-900 dark:text-slate-50 mb-1">Upload Faculty Database</h3>
-                                        <p className="text-sm text-slate-500 mb-4 max-w-sm">Import a CSV containing faculty IDs, names, shift types (e.g. 8-4), and max load hours.</p>
-                                        <Button variant="outline">Browse Files</Button>
-                                    </div>
+                                    <FacultyForm onSuccess={() => alert("Faculty Settings Saved! Check the top dashboard stats to verify.")} />
                                 </TabsContent>
 
-                                <TabsContent value="rooms" className="pt-6 text-slate-500">Rooms configuration table goes here...</TabsContent>
+                                <TabsContent value="rooms" className="pt-6">
+                                    <RoomForm onSuccess={() => alert("Room Added! Check the top dashboard stats to verify.")} />
+                                </TabsContent>
                                 <TabsContent value="constraints" className="pt-6 text-slate-500">Global constraint settings (lunch breaks, max continuous lectures) go here...</TabsContent>
 
                                 <TabsContent value="developer" className="pt-6">
@@ -414,7 +459,7 @@ export default function DashboardOverview() {
 
                         <CardFooter className="bg-slate-50/50 dark:bg-slate-900/20 border-t border-slate-100 dark:border-slate-800/50 text-xs text-slate-500 p-4">
                             <FileText className="w-3.5 h-3.5 mr-1.5" />
-                            Last generation generated 3 days ago by Admin.
+                            {lastGenerationDate ? `Last solved on ${lastGenerationDate} via Cloud Engine.` : "No timetable has been generated yet."}
                         </CardFooter>
                     </Card>
                 </div>

@@ -1,35 +1,73 @@
 "use client";
 
-import { useState } from "react";
-import { Filter, Download, Plus, Map, Search } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Filter, Download, Plus, Map, Search, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from "@/components/ui/card";
+import { createClient } from "@/utils/supabase/client";
 
-const TIMES = ["08:00 AM", "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "01:00 PM", "02:00 PM", "03:00 PM"];
-const ROOMS = [
-    { id: "L1", name: "CS Lab 1", type: "lab", capacity: 40 },
-    { id: "L2", name: "CS Lab 2", type: "lab", capacity: 40 },
-    { id: "R101", name: "Room 101", type: "theory", capacity: 60 },
-    { id: "R102", name: "Room 102", type: "theory", capacity: 60 },
-    { id: "R201", name: "Room 201", type: "theory", capacity: 80 },
-    { id: "R202", name: "Room 202", type: "theory", capacity: 80 },
-    { id: "S1", name: "Seminar Hall", type: "theory", capacity: 150 }
-];
+const TIMES = [8, 9, 10, 11, 12, 13, 14, 15, 16];
 
-// Helper to generate a deterministic pseudo-random occupancy status
-const getStatus = (roomId: string, timeIndex: number) => {
-    if (timeIndex === 4) return "lunch"; // 12 PM is lunch
-    const val = (roomId.charCodeAt(0) + roomId.charCodeAt(1) + timeIndex * 7) % 10;
-    if (val < 4) return "free";
-    if (val < 9) return "occupied";
-    return "maintenance";
+const mapMilitaryTo12Hour = (hour: number) => {
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const h = hour % 12 || 12;
+    return `${h.toString().padStart(2, '0')}:00 ${period}`;
 };
 
 export default function ResourceHeatmapView() {
     const [searchTerm, setSearchTerm] = useState("");
+    const [rooms, setRooms] = useState<any[]>([]);
+    const [matrices, setMatrices] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [selectedDay, setSelectedDay] = useState("Mon");
 
-    const filteredRooms = ROOMS.filter(r => r.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    const supabase = createClient();
+
+    useEffect(() => {
+        const fetchHeatmapData = async () => {
+            setIsLoading(true);
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) return;
+
+                const { data: profile } = await supabase.from("profiles").select("institution_id").eq("id", user.id).single();
+                if (!profile?.institution_id) return;
+
+                // Fetch physical rooms
+                const { data: dbRooms } = await supabase.from("rooms").select("*").eq("institution_id", profile.institution_id);
+                setRooms(dbRooms || []);
+
+                // Fetch live schedule
+                const { data: latestTimetable } = await supabase
+                    .from("generated_timetables")
+                    .select("matrix_data")
+                    .eq("institution_id", profile.institution_id)
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .single();
+
+                if (latestTimetable?.matrix_data?.schedule) {
+                    setMatrices(latestTimetable.matrix_data.schedule);
+                }
+            } catch (err) {
+                console.error("Heatmap fetch error:", err);
+            }
+            setIsLoading(false);
+        };
+
+        fetchHeatmapData();
+    }, []);
+
+    const getStatus = (roomId: string, timeIndex: number) => {
+        if (timeIndex === 13) return "lunch";
+
+        // Find if any class is scheduled in this room at this specific time AND selected day
+        const isOccupied = matrices.some(m => m.room === roomId && m.slot === timeIndex && m.day === selectedDay);
+        return isOccupied ? "occupied" : "free";
+    };
+
+    const filteredRooms = rooms.filter(r => r.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
@@ -54,6 +92,13 @@ export default function ResourceHeatmapView() {
                         <Filter className="w-4 h-4 mr-2" />
                         Filter
                     </Button>
+                    <select
+                        className="pl-3 pr-8 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-md text-sm font-medium focus:ring-2 focus:ring-blue-500 appearance-none h-9 shadow-sm"
+                        value={selectedDay}
+                        onChange={(e) => setSelectedDay(e.target.value)}
+                    >
+                        {["Mon", "Tue", "Wed", "Thu", "Fri"].map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
                 </div>
             </div>
 
@@ -97,7 +142,7 @@ export default function ResourceHeatmapView() {
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-slate-900 dark:text-slate-50">Campus Overview</p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Currently tracking 7 resources across 2 wings.</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Currently tracking {rooms.length} physical resources across campus.</p>
                             </div>
                         </CardContent>
                     </Card>
@@ -113,21 +158,28 @@ export default function ResourceHeatmapView() {
                                         <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400">Resource</th>
                                         {TIMES.map(time => (
                                             <th key={time} className="px-2 py-3 font-medium text-slate-500 dark:text-slate-400 text-center w-24">
-                                                {time}
+                                                {mapMilitaryTo12Hour(time)}
                                             </th>
                                         ))}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
-                                    {filteredRooms.map((room) => (
+                                    {isLoading ? (
+                                        <tr>
+                                            <td colSpan={10} className="py-20 text-center text-slate-500">
+                                                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 opacity-50" />
+                                                Fetching Live Infrastructure Matrix API...
+                                            </td>
+                                        </tr>
+                                    ) : filteredRooms.map((room) => (
                                         <tr key={room.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors group">
                                             <td className="px-4 py-3">
                                                 <div className="font-medium text-slate-900 dark:text-slate-100">{room.name}</div>
-                                                <div className="text-xs text-slate-500">Cap: {room.capacity} • {room.type}</div>
+                                                <div className="text-xs text-slate-500">Cap: {room.capacity} • {room.type || "theory"}</div>
                                             </td>
 
-                                            {TIMES.map((time, i) => {
-                                                const status = getStatus(room.id, i);
+                                            {TIMES.map((time) => {
+                                                const status = getStatus(room.name, time);
                                                 return (
                                                     <td key={time} className="px-2 py-3 text-center">
                                                         {status === "lunch" ? (
@@ -136,10 +188,10 @@ export default function ResourceHeatmapView() {
                                                             </div>
                                                         ) : (
                                                             <div className={`w-full h-8 rounded border flex items-center justify-center transition-all cursor-pointer hover:ring-2 hover:ring-offset-1 dark:hover:ring-offset-slate-950 ${status === 'free'
-                                                                    ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 hover:ring-emerald-500'
-                                                                    : status === 'occupied'
-                                                                        ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 text-blue-700 dark:text-blue-400 hover:ring-blue-500'
-                                                                        : 'bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20 text-orange-700 dark:text-orange-400 hover:ring-orange-500'
+                                                                ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 hover:ring-emerald-500'
+                                                                : status === 'occupied'
+                                                                    ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 text-blue-700 dark:text-blue-400 hover:ring-blue-500'
+                                                                    : 'bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20 text-orange-700 dark:text-orange-400 hover:ring-orange-500'
 
                                                                 }`}>
                                                                 <span className="text-[10px] font-semibold tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity">
@@ -155,7 +207,7 @@ export default function ResourceHeatmapView() {
                                 </tbody>
                             </table>
                         </div>
-                        {filteredRooms.length === 0 && (
+                        {filteredRooms.length === 0 && !isLoading && (
                             <div className="p-8 text-center text-slate-500">
                                 No rooms found matching "{searchTerm}"
                             </div>
