@@ -19,7 +19,6 @@ export default function LoginPage() {
     const [role, setRole] = useState("faculty");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-    const [rollNo, setRollNo] = useState("");
     const router = useRouter();
     const supabase = createClient();
 
@@ -28,12 +27,8 @@ export default function LoginPage() {
         setIsLoading(true);
 
         try {
-            // For now, regardless of role, we authenticate using email/password
-            // If student, we could map rollNo to an email format (e.g. 2024CS012@institute.edu)
-            const activeEmail = role === "student" ? `${rollNo}@institute.edu` : email;
-
             const { data, error } = await supabase.auth.signInWithPassword({
-                email: activeEmail,
+                email: email,
                 password: password,
             });
 
@@ -83,11 +78,7 @@ export default function LoginPage() {
                     </CardHeader>
                     <CardContent>
                         <Tabs defaultValue="faculty" className="w-full" onValueChange={setRole}>
-                            <TabsList className="grid w-full grid-cols-3 mb-8 bg-slate-100 dark:bg-slate-900 p-1 rounded-lg">
-                                <TabsTrigger value="student" className="rounded-md data-[state=active]:bg-white data-[state=active]:dark:bg-slate-800 data-[state=active]:shadow-sm text-xs sm:text-sm">
-                                    <User className="w-4 h-4 mr-2 hidden sm:block" />
-                                    Student
-                                </TabsTrigger>
+                            <TabsList className="grid w-full grid-cols-2 mb-8 bg-slate-100 dark:bg-slate-900 p-1 rounded-lg">
                                 <TabsTrigger value="faculty" className="rounded-md data-[state=active]:bg-white data-[state=active]:dark:bg-slate-800 data-[state=active]:shadow-sm text-xs sm:text-sm">
                                     <Users className="w-4 h-4 mr-2 hidden sm:block" />
                                     Faculty
@@ -100,49 +91,25 @@ export default function LoginPage() {
 
                             <form onSubmit={handleLogin} className="space-y-4">
                                 <AnimatePresence mode="popLayout">
-                                    {role !== "student" && (
-                                        <motion.div
-                                            key="email-input"
-                                            initial={{ opacity: 0, height: 0 }}
-                                            animate={{ opacity: 1, height: "auto" }}
-                                            exit={{ opacity: 0, height: 0 }}
-                                            transition={{ duration: 0.2 }}
-                                            className="space-y-2"
-                                        >
-                                            <Label htmlFor="email">Institute Email</Label>
-                                            <Input
-                                                id="email"
-                                                type="email"
-                                                value={email}
-                                                onChange={(e) => setEmail(e.target.value)}
-                                                placeholder="name@institute.edu"
-                                                required
-                                                className="bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 focus-visible:ring-blue-500"
-                                            />
-                                        </motion.div>
-                                    )}
-
-                                    {role === "student" && (
-                                        <motion.div
-                                            key="student-input"
-                                            initial={{ opacity: 0, height: 0 }}
-                                            animate={{ opacity: 1, height: "auto" }}
-                                            exit={{ opacity: 0, height: 0 }}
-                                            transition={{ duration: 0.2 }}
-                                            className="space-y-2"
-                                        >
-                                            <Label htmlFor="roll">Roll Number / Enrollment ID</Label>
-                                            <Input
-                                                id="roll"
-                                                type="text"
-                                                value={rollNo}
-                                                onChange={(e) => setRollNo(e.target.value)}
-                                                placeholder="e.g. 2024CS012"
-                                                required
-                                                className="bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 focus-visible:ring-blue-500"
-                                            />
-                                        </motion.div>
-                                    )}
+                                    <motion.div
+                                        key="email-input"
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: "auto" }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="space-y-2"
+                                    >
+                                        <Label htmlFor="email">Institute Email</Label>
+                                        <Input
+                                            id="email"
+                                            type="email"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            placeholder="name@institute.edu"
+                                            required
+                                            className="bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 focus-visible:ring-blue-500"
+                                        />
+                                    </motion.div>
                                 </AnimatePresence>
 
                                 <div className="space-y-2 pt-2">
