@@ -472,8 +472,13 @@ export default function DashboardOverview() {
     };
 
     const startGeneration = async () => {
+        if (!isDbReady) {
+            alert("⚠️ Cannot Generate: Your database is empty! You must use the Data Ingestion tabs to add at least 1 Room and 1 Faculty member before the AI can run.");
+            return;
+        }
+
         setIsGenerating(true);
-        setGenerationStep(0); // Parsing
+        setGenerationStep(0); // Initialize
 
         try {
             // STEP 1: Fetching dynamically from Supabase Pipeline
@@ -591,7 +596,7 @@ export default function DashboardOverview() {
             {/* Metrics Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {stats.map((stat) => (
-                    <Card key={stat.name} className="border-slate-200/60 dark:border-slate-800/60 shadow-sm hover:shadow-md transition-all">
+                    <Card key={stat.name} className="border-slate-200/60 dark:border-slate-800/60 shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-1 hover:border-blue-200 dark:hover:border-blue-800/50 cursor-default">
                         <CardContent className="p-6 flex items-center justify-between">
                             <div>
                                 <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{stat.name}</p>
@@ -686,12 +691,12 @@ export default function DashboardOverview() {
                     </Card>
                 </div>
 
-                {/* Right Column: IA Generation Trigger */}
+                {/* Right Column: AI Generation Trigger */}
                 <div className="xl:col-span-1">
-                    <Card className="border-slate-200/60 dark:border-slate-800/60 shadow-xl shadow-blue-500/5 dark:shadow-blue-500/10 h-full relative overflow-hidden flex flex-col">
+                    <Card className="border-slate-200/60 dark:border-slate-800/60 shadow-xl shadow-blue-500/5 dark:shadow-blue-500/10 h-full relative overflow-hidden flex flex-col transition-all duration-500 hover:shadow-blue-500/20 hover:border-blue-300 dark:hover:border-blue-700/50">
 
                         {/* Background glowing orb */}
-                        <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 dark:bg-blue-600/20 blur-[60px] rounded-full pointer-events-none" />
+                        <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 dark:bg-blue-600/20 blur-[60px] rounded-full pointer-events-none transition-transform duration-700 hover:scale-150" />
 
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2 text-xl">
@@ -714,13 +719,12 @@ export default function DashboardOverview() {
                                         <Button
                                             size="lg"
                                             onClick={startGeneration}
-                                            disabled={!isDbReady}
-                                            className={`w-full h-16 text-lg rounded-2xl text-white shadow-xl transition-all duration-300 group ${isDbReady ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-blue-600/25 hover:shadow-blue-600/40" : "bg-slate-400 dark:bg-slate-800 cursor-not-allowed shadow-none"}`}
+                                            className={`w-full h-16 text-lg rounded-2xl text-white shadow-xl transition-all duration-300 group hover:scale-[1.02] active:scale-95 ${isDbReady ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-blue-600/25 hover:shadow-blue-600/40" : "bg-slate-400 dark:bg-slate-800 hover:bg-slate-500 dark:hover:bg-slate-700 shadow-none"}`}
                                         >
                                             <Play className={`w-5 h-5 mr-3 transition-all ${isDbReady ? "fill-white/20 group-hover:fill-white/40" : "fill-white/10"}`} />
-                                            {isDbReady ? "Generate Smart Timetable (from DB)" : "Complete Setup First (0 Rooms or Faculty)"}
+                                            {isDbReady ? "Generate Smart Timetable" : "Setup Required (Click for details)"}
                                         </Button>
-                                        <p className="text-xs text-slate-500 mt-4 flex items-center gap-1.5">
+                                        <p className="text-xs text-slate-500 mt-4 flex items-center gap-1.5 transition-opacity">
                                             <Clock className="w-3.5 h-3.5" />
                                             Estimated solving time: ~45s
                                         </p>
