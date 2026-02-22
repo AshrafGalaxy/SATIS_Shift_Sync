@@ -15,6 +15,7 @@ import RoomForm from "@/components/forms/RoomForm";
 import FacultyForm from "@/components/forms/FacultyForm";
 
 export default function DashboardOverview() {
+    const [isMounted, setIsMounted] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationStep, setGenerationStep] = useState(0);
 
@@ -26,6 +27,10 @@ export default function DashboardOverview() {
     const [lastGenerationDate, setLastGenerationDate] = useState<string | null>(null);
 
     const supabase = createClient();
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
     useEffect(() => {
         const fetchDashboardStats = async () => {
@@ -287,6 +292,14 @@ export default function DashboardOverview() {
             setIsGenerating(false);
         }
     };
+
+    if (!isMounted) {
+        return (
+            <div className="w-full h-[60vh] flex items-center justify-center">
+                <div className="text-slate-400 font-medium">Checking live Database state...</div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
