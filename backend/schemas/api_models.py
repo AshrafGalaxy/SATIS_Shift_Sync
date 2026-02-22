@@ -6,6 +6,7 @@ from typing import List, Optional, Union, Dict, Any
 class SubjectType(str):
     THEORY = "Theory"
     PRACTICAL = "Practical"
+    TUTORIAL = "Tutorial"
 
 # --- Dynamic Custom Rules Engine ---
 
@@ -41,7 +42,7 @@ class RoomsConfig(BaseModel):
 
 class WorkloadItem(BaseModel):
     id: str = Field(..., description="Unique event ID to trace contiguous blocks easily")
-    type: str = Field(..., description="'Theory' or 'Practical'")
+    type: str = Field(..., description="'Theory', 'Practical', or 'Tutorial'")
     subject: str = Field(..., description="Subject code e.g. 'CS301'")
     target_groups: List[str] = Field(..., description="Array of targets (e.g. ['Div_A', 'Div_B'] for merged classes)")
     hours: int = Field(..., gt=0, description="Exact number of weekly hours required for this mapping")

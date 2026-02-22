@@ -124,7 +124,7 @@ export default function WorkloadForm({ onSuccess }: { onSuccess: () => void }) {
                             if (e.target.value === "Theory") setConsecutiveHours("1");
                         }}
                     >
-                        <option value="Theory">Theory</option>
+                        <option value="Theory">Theory (Lectures)</option>
                         <option value="Practical">Practical / Lab</option>
                         <option value="Tutorial">Tutorial</option>
                     </select>

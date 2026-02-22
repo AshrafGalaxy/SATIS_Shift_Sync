@@ -61,7 +61,7 @@ export function MasterTimetableView() {
                         faculty: entry.faculty_name || entry.faculty_id,
                         room: entry.room,
                         targets: entry.targets || [],
-                        type: entry.type === "Practical" || entry.subject.includes("LAB") ? "lab" : "theory"
+                        type: entry.type === "Tutorial" || entry.subject.includes("TUT") ? "tutorial" : (entry.type === "Practical" || entry.subject.includes("LAB") ? "lab" : "theory")
                     }));
                     setSlots(mappedSlots);
 
@@ -172,18 +172,20 @@ export function MasterTimetableView() {
                                                     {activeSlots.length > 0 ? (
                                                         <div className="h-full w-full flex flex-col gap-1.5 overflow-y-auto custom-scrollbar pr-1">
                                                             {activeSlots.map((slot, i) => (
-                                                                <div key={i} className={`shrink-0 rounded-md p-2 flex flex-col justify-between border cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md ${slot.type === 'lab'
-                                                                    ? 'bg-teal-50 dark:bg-teal-500/10 border-teal-200 dark:border-teal-500/20 hover:border-teal-300 dark:hover:border-teal-500/40'
-                                                                    : 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 hover:border-blue-300 dark:hover:border-blue-500/40'
+                                                                <div key={i} className={`shrink-0 rounded-md p-2 flex flex-col justify-between border cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md ${slot.type === 'tutorial'
+                                                                    ? 'bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/20 hover:border-purple-300 dark:hover:border-purple-500/40'
+                                                                    : slot.type === 'lab'
+                                                                        ? 'bg-teal-50 dark:bg-teal-500/10 border-teal-200 dark:border-teal-500/20 hover:border-teal-300 dark:hover:border-teal-500/40'
+                                                                        : 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 hover:border-blue-300 dark:hover:border-blue-500/40'
                                                                     }`}>
                                                                     <div>
                                                                         <div className="flex justify-between items-start mb-1">
-                                                                            <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 border-none truncate max-w-[70px] ${slot.type === 'lab' ? 'bg-teal-100 dark:bg-teal-500/20 text-teal-700 dark:text-teal-300' : 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300'}`}>
+                                                                            <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 border-none truncate max-w-[70px] ${slot.type === 'tutorial' ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300' : slot.type === 'lab' ? 'bg-teal-100 dark:bg-teal-500/20 text-teal-700 dark:text-teal-300' : 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300'}`}>
                                                                                 {slot.targets.join(", ")}
                                                                             </Badge>
                                                                             <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 truncate">{slot.room}</span>
                                                                         </div>
-                                                                        <p className={`text-xs font-bold truncate ${slot.type === 'lab' ? 'text-teal-900 dark:text-teal-100' : 'text-blue-900 dark:text-blue-100'}`}>
+                                                                        <p className={`text-xs font-bold truncate ${slot.type === 'tutorial' ? 'text-purple-900 dark:text-purple-100' : slot.type === 'lab' ? 'text-teal-900 dark:text-teal-100' : 'text-blue-900 dark:text-blue-100'}`}>
                                                                             {slot.subject}
                                                                         </p>
                                                                     </div>
