@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, FileText, CheckCircle2, Clock, Upload, Users, Building, GraduationCap } from "lucide-react";
+import { Play, FileText, CheckCircle2, Clock, Upload, Users, Building, GraduationCap, Database } from "lucide-react";
+
+import { createClient } from "@/utils/supabase/client";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -67,46 +69,170 @@ export default function DashboardOverview() {
         ]
     }, null, 4));
 
+    const supabase = createClient();
+    const [isSeeding, setIsSeeding] = useState(false);
+
+    const seedDatabase = async () => {
+        setIsSeeding(true);
+        try {
+            const payload = JSON.parse(jsonPayload);
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error("Authentication missing. Please log in.");
+
+            const profileId = user.id;
+
+            // 1. Institutions
+            const { data: instData, error: instErr } = await supabase
+                .from("institutions")
+                .insert({
+                    name: "ShiftSync Demo College",
+                    days_active: payload.college_settings.days_active,
+                    time_slots: payload.college_settings.time_slots,
+                    lunch_slot: payload.college_settings.lunch_slot,
+                    max_continuous_lectures: payload.college_settings.max_continuous_lectures
+                })
+                .select().single();
+            if (instErr) throw instErr;
+            const instId = instData.id;
+
+            await supabase.from("profiles").update({ institution_id: instId }).eq("id", profileId);
+
+            // 2. Rooms
+            for (const r of payload.rooms_config.rooms) {
+                await supabase.from("rooms").insert({
+                    institution_id: instId,
+                    name: r.id,
+                    type: r.type,
+                    capacity: r.capacity,
+                    tags: r.tags
+                });
+            }
+
+            // 3. Faculty Settings
+            const f = payload.faculty[0];
+            const { data: facData, error: facErr } = await supabase
+                .from("faculty_settings")
+                .insert({
+                    profile_id: profileId,
+                    max_load_hrs: f.max_load_hrs,
+                    shift_hours: f.shift,
+                    blocked_slots: f.blocked_slots,
+                    class_teacher_for: f.class_teacher_for
+                })
+                .select().single();
+            if (facErr) throw facErr;
+            const facId = facData.id;
+
+            // 4. Workloads
+            for (const w of f.workload) {
+                await supabase.from("workloads").insert({
+                    faculty_id: facId,
+                    subject_code: w.subject,
+                    type: w.type,
+                    target_groups: w.target_groups,
+                    weekly_hours: w.hours,
+                    consecutive_hours: w.consecutive_hours,
+                    required_tags: w.required_tags
+                });
+            }
+
+            alert("Data Seeded Successfully! The SQL Tables are now populated.");
+        } catch (err: any) {
+            console.error("Seeding Error:", err);
+            alert("Seeding failed: " + (err.message || "Unknown error"));
+        }
+        setIsSeeding(false);
+    };
+
     const startGeneration = async () => {
         setIsGenerating(true);
         setGenerationStep(0); // Parsing
 
         try {
-            const parsedPayload = JSON.parse(jsonPayload);
+            // STEP 1: Fetching dynamically from Supabase Pipeline
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error("Not authenticated");
+
+            const { data: profile } = await supabase.from("profiles").select("institution_id").eq("id", user.id).single();
+            const instId = profile?.institution_id;
+            if (!instId) throw new Error("No institution data seeded yet! Run Seed Database first.");
+
+            const { data: inst } = await supabase.from("institutions").select("*").eq("id", instId).single();
+            const { data: rooms } = await supabase.from("rooms").select("*").eq("institution_id", instId);
+            const { data: facSetting } = await supabase.from("faculty_settings").select("*").eq("profile_id", user.id).single();
+            const { data: workloads } = await supabase.from("workloads").select("*").eq("faculty_id", facSetting?.id);
+
+            // Construct the Python Engine Payload dynamically from SQL Result!
+            const dynamicPayload = {
+                college_settings: {
+                    days_active: inst.days_active,
+                    time_slots: inst.time_slots,
+                    lunch_slot: inst.lunch_slot,
+                    max_continuous_lectures: inst.max_continuous_lectures,
+                    custom_rules: []
+                },
+                rooms_config: {
+                    rooms: rooms?.map(r => ({ id: r.name, type: r.type, capacity: r.capacity, tags: r.tags }))
+                },
+                faculty: [
+                    {
+                        id: user.id.slice(0, 8),
+                        name: "Dr. Faculty (You)",
+                        shift: facSetting.shift_hours,
+                        max_load_hrs: facSetting.max_load_hrs,
+                        blocked_slots: facSetting.blocked_slots,
+                        class_teacher_for: facSetting.class_teacher_for,
+                        workload: workloads?.map(w => ({
+                            id: w.id.slice(0, 8),
+                            type: w.type,
+                            subject: w.subject_code,
+                            target_groups: w.target_groups,
+                            hours: w.weekly_hours,
+                            consecutive_hours: w.consecutive_hours,
+                            required_tags: w.required_tags
+                        }))
+                    }
+                ]
+            };
 
             setGenerationStep(1); // Calling API
 
             const response = await fetch("http://localhost:8000/api/v1/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(parsedPayload)
+                body: JSON.stringify(dynamicPayload)
             });
 
             if (!response.ok) {
                 const errorData = await response.json();
-                console.error("Solver Error:", errorData);
                 alert("Generation Failed: " + JSON.stringify(errorData.detail || errorData));
                 setIsGenerating(false);
                 return;
             }
 
             const data = await response.json();
-            console.log("Optimal Timetable Matrix:", data);
+            console.log("Optimal Timetable Matrix (Remote):", data);
 
             setGenerationStep(2); // Optimizing
+
+            // STEP 2: Save the generated matrix to Supabase `generated_timetables`
+            await supabase.from("generated_timetables").insert({
+                institution_id: instId,
+                is_active: true,
+                matrix_data: data
+            });
 
             setTimeout(() => {
                 setGenerationStep(3); // Complete
                 setTimeout(() => {
                     setIsGenerating(false);
-                    // In real app, we would save this `data.schedule` to Supabase here
-                    alert(`Success! Generated ${data.total_classes} class mappings. Check Browser Console for array.`);
+                    alert(`Success! Generated 4D Matrix saved to PostgreSQL!`);
                 }, 1500);
             }, 1000);
 
-        } catch (error) {
-            console.error("Network Error:", error);
-            alert("Failed to connect to Python Backend Engine.");
+        } catch (error: any) {
+            console.error("Pipeline Error:", error);
+            alert(error.message || "Failed to connect to Python Backend Engine.");
             setIsGenerating(false);
         }
     };
@@ -183,6 +309,14 @@ export default function DashboardOverview() {
                                             className="w-full h-80 p-4 font-mono text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-inner"
                                             spellCheck="false"
                                         />
+                                        <Button
+                                            onClick={seedDatabase}
+                                            disabled={isSeeding}
+                                            className="w-full mt-4 bg-teal-600 hover:bg-teal-700 text-white"
+                                        >
+                                            <Database className="w-4 h-4 mr-2" />
+                                            {isSeeding ? "Translating Editor to SQL..." : "Step 1: Convert to Real SQL Rows (Seed DB)"}
+                                        </Button>
                                     </div>
                                 </TabsContent>
                             </Tabs>
@@ -221,7 +355,7 @@ export default function DashboardOverview() {
                                             className="w-full h-16 text-lg rounded-2xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-xl shadow-blue-600/25 group transition-all duration-300 hover:shadow-blue-600/40"
                                         >
                                             <Play className="w-5 h-5 mr-3 fill-white/20 group-hover:fill-white/40 transition-all" />
-                                            Generate Smart Timetable
+                                            Generate Smart Timetable (from DB)
                                         </Button>
                                         <p className="text-xs text-slate-500 mt-4 flex items-center gap-1.5">
                                             <Clock className="w-3.5 h-3.5" />
