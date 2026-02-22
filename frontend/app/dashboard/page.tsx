@@ -287,7 +287,7 @@ export default function DashboardOverview() {
             }, 1000);
 
         } catch (error: any) {
-            console.error("Pipeline Error:", error);
+            console.warn("Pipeline Validation:", error.message);
             alert(error.message || "Failed to connect to Python Backend Engine.");
             setIsGenerating(false);
         }
