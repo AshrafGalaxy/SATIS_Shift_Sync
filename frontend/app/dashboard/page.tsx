@@ -359,8 +359,10 @@ export default function DashboardOverview() {
             if (instId) {
                 await supabase.from("generated_timetables").delete().eq("institution_id", instId);
                 await supabase.from("rooms").delete().eq("institution_id", instId);
-                await supabase.from("institutions").delete().eq("id", instId);
+
+                // CRITICAL FIX: Detach profile FIRST to prevent PostgreSQL ON DELETE CASCADE from erasing the auth user's profile
                 await supabase.from("profiles").update({ institution_id: null }).eq("id", user.id);
+                await supabase.from("institutions").delete().eq("id", instId);
             }
 
             const { data: faculties } = await supabase.from("faculty_settings").select("id").eq("profile_id", user.id);
@@ -403,7 +405,18 @@ export default function DashboardOverview() {
             if (instErr) throw instErr;
             const instId = instData.id;
 
-            await supabase.from("profiles").update({ institution_id: instId }).eq("id", profileId);
+            // Heal missing profile if it was accidentally cascade deleted by the old bug
+            const { data: hasProfile } = await supabase.from("profiles").select("id").eq("id", profileId).maybeSingle();
+            if (!hasProfile) {
+                await supabase.from("profiles").insert({
+                    id: profileId,
+                    full_name: "ShiftSync Admin",
+                    role: "admin",
+                    institution_id: instId
+                });
+            } else {
+                await supabase.from("profiles").update({ institution_id: instId }).eq("id", profileId);
+            }
 
             // 2. Rooms
             for (const r of payload.rooms_config.rooms) {
