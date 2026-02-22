@@ -18,6 +18,7 @@ const mapMilitaryTo12Hour = (hour: number) => {
 
 export default function MasterTimetableView() {
     const [activeFilter, setActiveFilter] = useState("All Divisions");
+    const [availableFilters, setAvailableFilters] = useState<string[]>(["All Divisions"]);
     const [slots, setSlots] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const supabase = createClient();
@@ -44,14 +45,17 @@ export default function MasterTimetableView() {
                     // Map Python generic array back into our UI grid system
                     const mappedSlots = latestTimetable.matrix_data.schedule.map((entry: any) => ({
                         day: entry.day, // e.g. "Mon"
-                        time: entry.slot, // e.g. 8
+                        time: entry.time_slot,
                         subject: entry.subject,
-                        faculty: entry.faculty_id, // we might want to join name later, using ID for now
+                        faculty: entry.faculty_name || entry.faculty_id,
                         room: entry.room,
-                        division: entry.target_group,
-                        type: entry.subject.includes("LAB") ? "lab" : "theory"
+                        targets: entry.targets || [],
+                        type: entry.type === "Practical" || entry.subject.includes("LAB") ? "lab" : "theory"
                     }));
                     setSlots(mappedSlots);
+
+                    const uniqueTargets = Array.from(new Set(mappedSlots.flatMap((s: any) => s.targets)));
+                    setAvailableFilters(["All Divisions", ...uniqueTargets as string[]]);
                 }
             } catch (err) {
                 console.error("Error fetching timetable:", err);
@@ -79,10 +83,9 @@ export default function MasterTimetableView() {
                             value={activeFilter}
                             onChange={(e) => setActiveFilter(e.target.value)}
                         >
-                            <option>All Divisions</option>
-                            <option>Division A</option>
-                            <option>Division B</option>
-                            <option>Division C</option>
+                            {availableFilters.map(f => (
+                                <option key={f} value={f}>{f}</option>
+                            ))}
                         </select>
                     </div>
                     <Button variant="outline" size="sm" className="h-9">
@@ -125,7 +128,7 @@ export default function MasterTimetableView() {
                                 {/* Slots Wrapper */}
                                 <div className="flex flex-1 relative">
                                     {TIMES.map((time) => {
-                                        const slot = slots.find(s => s.day === day && s.time === time && (activeFilter === "All Divisions" || `Division ${s.division}` === activeFilter));
+                                        const activeSlots = slots.filter(s => s.day === day && s.time === time && (activeFilter === "All Divisions" || s.targets.includes(activeFilter)));
                                         const isLunch = time === 13;
 
                                         if (isLunch) {
@@ -137,35 +140,39 @@ export default function MasterTimetableView() {
                                         }
 
                                         return (
-                                            <div key={time} className="flex-1 min-w-[140px] border-r border-slate-100 dark:border-slate-800/50 p-1.5 relative group/slot">
+                                            <div key={time} className="flex-1 min-w-[140px] border-r border-slate-100 dark:border-slate-800/50 p-1.5 relative group/slot max-h-[140px]">
                                                 {isLoading ? (
                                                     <div className="w-full h-full flex justify-center items-center">
                                                         <div className="w-4 h-4 rounded-full border-2 border-slate-200 dark:border-slate-800 border-t-slate-400 dark:border-t-slate-500 animate-spin" />
                                                     </div>
-                                                ) : slot ? (
-                                                    <div className={`h-full w-full rounded-md p-2 flex flex-col justify-between border cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md ${slot.type === 'lab'
-                                                        ? 'bg-teal-50 dark:bg-teal-500/10 border-teal-200 dark:border-teal-500/20 hover:border-teal-300 dark:hover:border-teal-500/40'
-                                                        : 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 hover:border-blue-300 dark:hover:border-blue-500/40'
-                                                        }`}>
-                                                        <div>
-                                                            <div className="flex justify-between items-start mb-1">
-                                                                <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 border-none ${slot.type === 'lab' ? 'bg-teal-100 dark:bg-teal-500/20 text-teal-700 dark:text-teal-300' : 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300'}`}>
-                                                                    Div {slot.division}
-                                                                </Badge>
-                                                                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 truncate">{slot.room}</span>
+                                                ) : activeSlots.length > 0 ? (
+                                                    <div className="h-full w-full flex flex-col gap-1.5 overflow-y-auto custom-scrollbar pr-1">
+                                                        {activeSlots.map((slot, i) => (
+                                                            <div key={i} className={`shrink-0 rounded-md p-2 flex flex-col justify-between border cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md ${slot.type === 'lab'
+                                                                ? 'bg-teal-50 dark:bg-teal-500/10 border-teal-200 dark:border-teal-500/20 hover:border-teal-300 dark:hover:border-teal-500/40'
+                                                                : 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 hover:border-blue-300 dark:hover:border-blue-500/40'
+                                                                }`}>
+                                                                <div>
+                                                                    <div className="flex justify-between items-start mb-1">
+                                                                        <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 border-none truncate max-w-[70px] ${slot.type === 'lab' ? 'bg-teal-100 dark:bg-teal-500/20 text-teal-700 dark:text-teal-300' : 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300'}`}>
+                                                                            {slot.targets.join(", ")}
+                                                                        </Badge>
+                                                                        <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 truncate">{slot.room}</span>
+                                                                    </div>
+                                                                    <p className={`text-xs font-bold truncate ${slot.type === 'lab' ? 'text-teal-900 dark:text-teal-100' : 'text-blue-900 dark:text-blue-100'}`}>
+                                                                        {slot.subject}
+                                                                    </p>
+                                                                </div>
+                                                                <div className="mt-2 flex items-center gap-1">
+                                                                    <div className="w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-700 flex justify-center items-center overflow-hidden shrink-0">
+                                                                        <span className="text-[8px]">{slot.faculty?.charAt(0)}</span>
+                                                                    </div>
+                                                                    <p className="text-[10px] text-slate-600 dark:text-slate-400 font-medium truncate">
+                                                                        {slot.faculty}
+                                                                    </p>
+                                                                </div>
                                                             </div>
-                                                            <p className={`text-xs font-bold truncate ${slot.type === 'lab' ? 'text-teal-900 dark:text-teal-100' : 'text-blue-900 dark:text-blue-100'}`}>
-                                                                {slot.subject}
-                                                            </p>
-                                                        </div>
-                                                        <div className="mt-2 flex items-center gap-1">
-                                                            <div className="w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-700 flex justify-center items-center overflow-hidden shrink-0">
-                                                                <span className="text-[8px]">{slot.faculty?.charAt(0)}</span>
-                                                            </div>
-                                                            <p className="text-[10px] text-slate-600 dark:text-slate-400 font-medium truncate">
-                                                                {slot.faculty}
-                                                            </p>
-                                                        </div>
+                                                        ))}
                                                     </div>
                                                 ) : (
                                                     <div className="h-full w-full rounded-md border border-dashed border-slate-200 dark:border-slate-800 opacity-0 group-hover/slot:opacity-100 transition-opacity flex items-center justify-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">

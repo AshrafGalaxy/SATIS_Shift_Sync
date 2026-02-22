@@ -417,32 +417,35 @@ export default function DashboardOverview() {
             }
 
             // 3. Faculty Settings
-            const f = payload.faculty[0];
-            const { data: facData, error: facErr } = await supabase
-                .from("faculty_settings")
-                .insert({
-                    profile_id: profileId,
-                    max_load_hrs: f.max_load_hrs,
-                    shift_hours: f.shift,
-                    blocked_slots: f.blocked_slots,
-                    class_teacher_for: f.class_teacher_for
-                })
-                .select().single();
-            if (facErr) throw facErr;
-            const facId = facData.id;
+            for (const f of payload.faculty) {
+                const { data: facData, error: facErr } = await supabase
+                    .from("faculty_settings")
+                    .insert({
+                        profile_id: profileId,
+                        max_load_hrs: f.max_load_hrs,
+                        shift_hours: f.shift,
+                        blocked_slots: f.blocked_slots,
+                        class_teacher_for: f.class_teacher_for
+                    })
+                    .select().single();
+                if (facErr) throw facErr;
+                const facId = facData.id;
 
-            // 4. Workloads
-            for (const w of f.workload) {
-                await supabase.from("workloads").insert({
-                    faculty_id: facId,
-                    subject_code: w.subject,
-                    type: w.type,
-                    target_groups: w.target_groups,
-                    weekly_hours: w.hours,
-                    consecutive_hours: w.consecutive_hours,
-                    required_tags: w.required_tags
-                });
+                // 4. Workloads
+                for (const w of f.workload) {
+                    await supabase.from("workloads").insert({
+                        faculty_id: facId,
+                        subject_code: w.subject,
+                        type: w.type,
+                        target_groups: w.target_groups,
+                        weekly_hours: w.hours,
+                        consecutive_hours: w.consecutive_hours,
+                        required_tags: w.required_tags
+                    });
+                }
             }
+
+
 
             alert("Data Seeded Successfully! The SQL Tables are now populated.");
         } catch (err: any) {
@@ -467,9 +470,32 @@ export default function DashboardOverview() {
 
             const { data: inst } = await supabase.from("institutions").select("*").eq("id", instId).single();
             const { data: rooms } = await supabase.from("rooms").select("*").eq("institution_id", instId);
-            const { data: facSetting } = await supabase.from("faculty_settings").select("*").eq("profile_id", user.id).single();
-            if (!facSetting) throw new Error("No Faculty Configuration found! Please complete the 'Faculty' tab setup before generating.");
-            const { data: workloads } = await supabase.from("workloads").select("*").eq("faculty_id", facSetting.id);
+
+            // Fetch ALL faculty linked to this user's simulated environment
+            const { data: facSettings } = await supabase.from("faculty_settings").select("*").eq("profile_id", user.id);
+            if (!facSettings || facSettings.length === 0) throw new Error("No Faculty Configuration found! Please complete the 'Faculty' tab setup before generating.");
+
+            // Build dynamic payload mapping all faculties
+            const mappedFaculties = await Promise.all(facSettings.map(async (facSetting) => {
+                const { data: workloads } = await supabase.from("workloads").select("*").eq("faculty_id", facSetting.id);
+                return {
+                    id: facSetting.id.slice(0, 8),
+                    name: `Faculty ${facSetting.id.slice(0, 4)}`, // Temporarily use ID mapping
+                    shift: facSetting.shift_hours,
+                    max_load_hrs: facSetting.max_load_hrs,
+                    blocked_slots: facSetting.blocked_slots,
+                    class_teacher_for: facSetting.class_teacher_for,
+                    workload: workloads?.map(w => ({
+                        id: w.id.slice(0, 8),
+                        type: w.type,
+                        subject: w.subject_code,
+                        target_groups: w.target_groups,
+                        hours: w.weekly_hours,
+                        consecutive_hours: w.consecutive_hours,
+                        required_tags: w.required_tags
+                    })) || []
+                };
+            }));
 
             // Construct the Python Engine Payload dynamically from SQL Result!
             const dynamicPayload = {
@@ -483,25 +509,7 @@ export default function DashboardOverview() {
                 rooms_config: {
                     rooms: rooms?.map(r => ({ id: r.name, type: r.type, capacity: r.capacity, tags: r.tags }))
                 },
-                faculty: [
-                    {
-                        id: user.id.slice(0, 8),
-                        name: "Dr. Faculty (You)",
-                        shift: facSetting.shift_hours,
-                        max_load_hrs: facSetting.max_load_hrs,
-                        blocked_slots: facSetting.blocked_slots,
-                        class_teacher_for: facSetting.class_teacher_for,
-                        workload: workloads?.map(w => ({
-                            id: w.id.slice(0, 8),
-                            type: w.type,
-                            subject: w.subject_code,
-                            target_groups: w.target_groups,
-                            hours: w.weekly_hours,
-                            consecutive_hours: w.consecutive_hours,
-                            required_tags: w.required_tags
-                        }))
-                    }
-                ]
+                faculty: mappedFaculties
             };
 
             setGenerationStep(1); // Calling API
@@ -596,7 +604,7 @@ export default function DashboardOverview() {
                                     <TabsTrigger value="faculty" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">Faculty</TabsTrigger>
                                     <TabsTrigger value="rooms" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">Rooms</TabsTrigger>
                                     <TabsTrigger value="constraints" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">Constraints</TabsTrigger>
-                                    <TabsTrigger value="developer" className="data-[state=active]:border-b-2 data-[state=active]:border-teal-500 rounded-none h-12 px-6 text-teal-600 dark:text-teal-400">Dev Editor</TabsTrigger>
+                                    <TabsTrigger value="demo_data" className="data-[state=active]:border-b-2 data-[state=active]:border-teal-500 rounded-none h-12 px-6 text-teal-600 dark:text-teal-400">Quick Start: Demo Data</TabsTrigger>
                                 </TabsList>
 
                                 <TabsContent value="faculty" className="pt-6">
@@ -608,13 +616,16 @@ export default function DashboardOverview() {
                                 </TabsContent>
                                 <TabsContent value="constraints" className="pt-6 text-slate-500">Global constraint settings (lunch breaks, max continuous lectures) go here...</TabsContent>
 
-                                <TabsContent value="developer" className="pt-6">
+                                <TabsContent value="demo_data" className="pt-6">
                                     <div className="flex flex-col space-y-2">
                                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
                                             <div className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-                                            Raw JSON Configuration (Test Engine)
+                                            Import Pre-configured Demo Environment
                                         </label>
-                                        <p className="text-xs text-slate-500 mb-2">Modify the exact OR-Tools JSON payload below to test the AI directly. Change Dr. Sharma's <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded">max_load_hrs</code> to 2 to see the math validator kick in.</p>
+                                        <p className="text-xs text-slate-500 mb-2">
+                                            To easily test the AI System, you can inject this pre-written block of constraints describing a complex "Computer Science" schedule directly into the blank Database.
+                                            Press <strong className="text-teal-600">Step 1</strong> below, and then press the large <strong>Generate Smart Timetable</strong> button on the right!
+                                        </p>
                                         <textarea
                                             value={jsonPayload}
                                             onChange={(e) => setJsonPayload(e.target.value)}
@@ -627,7 +638,7 @@ export default function DashboardOverview() {
                                             className="w-full mt-4 bg-teal-600 hover:bg-teal-700 text-white"
                                         >
                                             <Database className="w-4 h-4 mr-2" />
-                                            {isSeeding ? "Translating Editor to SQL..." : "Step 1: Convert to Real SQL Rows (Seed DB)"}
+                                            {isSeeding ? "Importing to SQL..." : "Step 1: Save Demo Configuration to Database"}
                                         </Button>
                                         <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
                                             <Button
