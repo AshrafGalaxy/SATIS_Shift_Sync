@@ -19,66 +19,67 @@ export default function DashboardOverview() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationStep, setGenerationStep] = useState(0);
 
+    const [jsonPayload, setJsonPayload] = useState(JSON.stringify({
+        "college_settings": {
+            "days_active": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+            "time_slots": [8, 9, 10, 11, 12, 13, 14, 15, 16],
+            "lunch_slot": 13,
+            "max_continuous_lectures": 2,
+            "custom_rules": []
+        },
+        "rooms_config": {
+            "rooms": [
+                { "id": "D201", "type": "Classroom", "capacity": 80, "tags": ["Projector"] },
+                { "id": "L101", "type": "Laboratory", "capacity": 30, "tags": ["Linux_Lab", "Projector"] }
+            ]
+        },
+        "faculty": [
+            {
+                "id": "F001",
+                "name": "Dr. Sharma",
+                "shift": [8, 9, 10, 11, 12, 13, 14, 15],
+                "max_load_hrs": 16,
+                "blocked_slots": [
+                    { "day": "Mon", "time": 8 }
+                ],
+                "class_teacher_for": "Div_A",
+                "workload": [
+                    {
+                        "id": "EVT_1",
+                        "type": "Theory",
+                        "subject": "CS301",
+                        "target_groups": ["Div_A", "Div_B"],
+                        "hours": 3,
+                        "consecutive_hours": 1,
+                        "required_tags": ["Projector"]
+                    },
+                    {
+                        "id": "EVT_2",
+                        "type": "Practical",
+                        "subject": "CS301_LAB",
+                        "target_groups": ["Batch_A1"],
+                        "hours": 2,
+                        "consecutive_hours": 2,
+                        "required_tags": ["Linux_Lab"]
+                    }
+                ]
+            }
+        ]
+    }, null, 4));
+
     const startGeneration = async () => {
         setIsGenerating(true);
         setGenerationStep(0); // Parsing
 
         try {
-            // Hardcoded payload showcasing the Edge-Case advanced constraints
-            const mockPayload = {
-                "college_settings": {
-                    "days_active": ["Mon", "Tue", "Wed", "Thu", "Fri"],
-                    "time_slots": [8, 9, 10, 11, 12, 13, 14, 15, 16],
-                    "lunch_slot": 13,
-                    "max_continuous_lectures": 2,
-                    "custom_rules": []
-                },
-                "rooms_config": {
-                    "rooms": [
-                        { "id": "D201", "type": "Classroom", "capacity": 80, "tags": ["Projector"] },
-                        { "id": "L101", "type": "Laboratory", "capacity": 30, "tags": ["Linux_Lab", "Projector"] }
-                    ]
-                },
-                "faculty": [
-                    {
-                        "id": "F001",
-                        "name": "Dr. Sharma",
-                        "shift": [8, 9, 10, 11, 12, 13, 14, 15],
-                        "max_load_hrs": 16,
-                        "blocked_slots": [
-                            { "day": "Mon", "time": 8 }
-                        ],
-                        "class_teacher_for": "Div_A",
-                        "workload": [
-                            {
-                                "id": "EVT_1",
-                                "type": "Theory",
-                                "subject": "CS301",
-                                "target_groups": ["Div_A", "Div_B"],
-                                "hours": 3,
-                                "consecutive_hours": 1,
-                                "required_tags": ["Projector"]
-                            },
-                            {
-                                "id": "EVT_2",
-                                "type": "Practical",
-                                "subject": "CS301_LAB",
-                                "target_groups": ["Batch_A1"],
-                                "hours": 2,
-                                "consecutive_hours": 2,
-                                "required_tags": ["Linux_Lab"]
-                            }
-                        ]
-                    }
-                ]
-            };
+            const parsedPayload = JSON.parse(jsonPayload);
 
             setGenerationStep(1); // Calling API
 
             const response = await fetch("http://localhost:8000/api/v1/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(mockPayload)
+                body: JSON.stringify(parsedPayload)
             });
 
             if (!response.ok) {
@@ -147,11 +148,12 @@ export default function DashboardOverview() {
                             <CardDescription>Upload or modify institutional constraints and capacities.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <Tabs defaultValue="faculty" className="w-full">
+                            <Tabs defaultValue="developer" className="w-full">
                                 <TabsList className="w-full justify-start border-b border-slate-200 dark:border-slate-800 rounded-none bg-transparent p-0 h-12">
                                     <TabsTrigger value="faculty" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">Faculty</TabsTrigger>
                                     <TabsTrigger value="rooms" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">Rooms</TabsTrigger>
                                     <TabsTrigger value="constraints" className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-12 px-6">Constraints</TabsTrigger>
+                                    <TabsTrigger value="developer" className="data-[state=active]:border-b-2 data-[state=active]:border-teal-500 rounded-none h-12 px-6 text-teal-600 dark:text-teal-400">Dev Editor</TabsTrigger>
                                 </TabsList>
 
                                 <TabsContent value="faculty" className="pt-6">
@@ -167,6 +169,22 @@ export default function DashboardOverview() {
 
                                 <TabsContent value="rooms" className="pt-6 text-slate-500">Rooms configuration table goes here...</TabsContent>
                                 <TabsContent value="constraints" className="pt-6 text-slate-500">Global constraint settings (lunch breaks, max continuous lectures) go here...</TabsContent>
+
+                                <TabsContent value="developer" className="pt-6">
+                                    <div className="flex flex-col space-y-2">
+                                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+                                            Raw JSON Configuration (Test Engine)
+                                        </label>
+                                        <p className="text-xs text-slate-500 mb-2">Modify the exact OR-Tools JSON payload below to test the AI directly. Change Dr. Sharma's <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded">max_load_hrs</code> to 2 to see the math validator kick in.</p>
+                                        <textarea
+                                            value={jsonPayload}
+                                            onChange={(e) => setJsonPayload(e.target.value)}
+                                            className="w-full h-80 p-4 font-mono text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-inner"
+                                            spellCheck="false"
+                                        />
+                                    </div>
+                                </TabsContent>
                             </Tabs>
                         </CardContent>
                     </Card>
