@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Filter, Download, Plus, ChevronLeft, ChevronRight, Maximize2, Minimize2, Loader2, CalendarDays, FileSpreadsheet, Calendar as CalendarIcon, Printer, FileText, ChevronDown } from "lucide-react";
+import { Filter, Download, Plus, ChevronLeft, ChevronRight, Maximize2, Minimize2, Loader2, CalendarDays, FileSpreadsheet, Calendar as CalendarIcon, Printer, FileText, ChevronDown, Lock, Unlock } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
@@ -21,17 +21,33 @@ const mapMilitaryTo12Hour = (hour: number) => {
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
-export function MasterTimetableView() {
+export function MasterTimetableView({ targetIdProp, hideFullscreen }: { targetIdProp?: string, hideFullscreen?: boolean } = {}) {
     const searchParams = useSearchParams();
-    const targetId = searchParams.get("id");
+    const targetId = targetIdProp || searchParams.get("id");
 
     const [activeFilter, setActiveFilter] = useState("All Divisions");
     const [availableFilters, setAvailableFilters] = useState<string[]>(["All Divisions"]);
     const [slots, setSlots] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [pinnedClasses, setPinnedClasses] = useState<string[]>([]);
+    const [instId, setInstId] = useState<string | null>(null);
+    const [lunchSlot, setLunchSlot] = useState<number>(13);
     const gridRef = useRef<HTMLDivElement>(null);
     const supabase = createClient();
+
+    const togglePin = (slot: any) => {
+        if (!instId || !slot.workload_id) return;
+        const key = `${slot.workload_id}|${slot.room}|${slot.day}|${slot.time}`;
+        let newPins;
+        if (pinnedClasses.includes(key)) {
+            newPins = pinnedClasses.filter(k => k !== key);
+        } else {
+            newPins = [...pinnedClasses, key];
+        }
+        setPinnedClasses(newPins);
+        localStorage.setItem(`pinned_classes_${instId}`, JSON.stringify(newPins));
+    };
 
     useEffect(() => {
         const handleFullscreenChange = () => {
@@ -50,6 +66,13 @@ export function MasterTimetableView() {
 
                 const { data: profile } = await supabase.from("profiles").select("institution_id").eq("id", user.id).single();
                 if (!profile?.institution_id) throw new Error("No institution");
+                setInstId(profile.institution_id);
+
+                const { data: instData } = await supabase.from("institutions").select("lunch_slot").eq("id", profile.institution_id).single();
+                if (instData?.lunch_slot) setLunchSlot(instData.lunch_slot);
+
+                const storedPins = localStorage.getItem(`pinned_classes_${profile.institution_id}`);
+                if (storedPins) setPinnedClasses(JSON.parse(storedPins));
 
                 let query = supabase
                     .from("generated_timetables")
@@ -71,6 +94,7 @@ export function MasterTimetableView() {
                 if (latestTimetable && latestTimetable.matrix_data && latestTimetable.matrix_data.schedule) {
                     // Map Python generic array back into our UI grid system
                     const mappedSlots = latestTimetable.matrix_data.schedule.map((entry: any) => ({
+                        workload_id: entry.workload_id,
                         day: entry.day, // e.g. "Mon"
                         time: entry.time_slot,
                         subject: entry.subject,
@@ -133,7 +157,7 @@ export function MasterTimetableView() {
         DAYS.forEach(day => {
             const row: string[] = [day];
             TIMES.forEach(time => {
-                if (time === 13) {
+                if (time === lunchSlot) {
                     row.push("Lunch Break");
                 } else {
                     const activeSlots = slots.filter(s => s.day === day && s.time === time && (activeFilter === "All Divisions" || s.targets.includes(activeFilter)));
@@ -273,10 +297,12 @@ export function MasterTimetableView() {
                         </DropdownMenuContent>
                     </DropdownMenu>
 
-                    <Button size="sm" className="h-9 bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 md:flex hidden" onClick={toggleFullscreen}>
-                        {isFullscreen ? <Minimize2 className="w-4 h-4 mr-2" /> : <Maximize2 className="w-4 h-4 mr-2" />}
-                        {isFullscreen ? "Exit Fullscreen" : "Fullscreen Focus"}
-                    </Button>
+                    {!hideFullscreen && (
+                        <Button size="sm" className="h-9 bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 md:flex hidden" onClick={toggleFullscreen}>
+                            {isFullscreen ? <Minimize2 className="w-4 h-4 mr-2" /> : <Maximize2 className="w-4 h-4 mr-2" />}
+                            {isFullscreen ? "Exit Fullscreen" : "Fullscreen Focus"}
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -326,7 +352,7 @@ export function MasterTimetableView() {
                                     <div className="flex flex-1 relative">
                                         {TIMES.map((time) => {
                                             const activeSlots = slots.filter(s => s.day === day && s.time === time && (activeFilter === "All Divisions" || s.targets.includes(activeFilter)));
-                                            const isLunch = time === 13;
+                                            const isLunch = time === lunchSlot;
 
                                             if (isLunch) {
                                                 return (
@@ -340,34 +366,46 @@ export function MasterTimetableView() {
                                                 <div key={time} className="flex-1 min-w-[140px] border-r border-slate-100 dark:border-slate-800/50 p-1.5 relative group/slot max-h-[140px]">
                                                     {activeSlots.length > 0 ? (
                                                         <div className="h-full w-full flex flex-col gap-1.5 overflow-y-auto custom-scrollbar pr-1">
-                                                            {activeSlots.map((slot, i) => (
-                                                                <div key={i} className={`shrink-0 rounded-md p-2 flex flex-col justify-between border cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md ${slot.type === 'tutorial'
-                                                                    ? 'bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/20 hover:border-purple-300 dark:hover:border-purple-500/40'
-                                                                    : slot.type === 'lab'
-                                                                        ? 'bg-teal-50 dark:bg-teal-500/10 border-teal-200 dark:border-teal-500/20 hover:border-teal-300 dark:hover:border-teal-500/40'
-                                                                        : 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 hover:border-blue-300 dark:hover:border-blue-500/40'
-                                                                    }`}>
-                                                                    <div>
-                                                                        <div className="flex justify-between items-start mb-1">
-                                                                            <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 border-none truncate max-w-[70px] ${slot.type === 'tutorial' ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300' : slot.type === 'lab' ? 'bg-teal-100 dark:bg-teal-500/20 text-teal-700 dark:text-teal-300' : 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300'}`}>
-                                                                                {slot.targets.join(", ")}
-                                                                            </Badge>
-                                                                            <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 truncate">{slot.room}</span>
+                                                            {activeSlots.map((slot, i) => {
+                                                                const isPinned = pinnedClasses.includes(`${slot.workload_id}|${slot.room}|${slot.day}|${slot.time}`);
+                                                                return (
+                                                                    <div key={i} className={`shrink-0 rounded-md p-2 flex flex-col justify-between border cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md relative group/card ${slot.type === 'tutorial'
+                                                                        ? (isPinned ? 'bg-purple-100/80 dark:bg-purple-500/30 border-purple-400' : 'bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/20 hover:border-purple-300 dark:hover:border-purple-500/40')
+                                                                        : slot.type === 'lab'
+                                                                            ? (isPinned ? 'bg-teal-100/80 dark:bg-teal-500/30 border-teal-400' : 'bg-teal-50 dark:bg-teal-500/10 border-teal-200 dark:border-teal-500/20 hover:border-teal-300 dark:hover:border-teal-500/40')
+                                                                            : (isPinned ? 'bg-blue-100/80 dark:bg-blue-500/30 border-blue-400' : 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 hover:border-blue-300 dark:hover:border-blue-500/40')
+                                                                        }`}>
+
+                                                                        <div
+                                                                            className={`absolute top-1 right-1 p-1 rounded-md opacity-0 group-hover/card:opacity-100 transition-opacity z-10 ${isPinned ? 'opacity-100 bg-white shadow-sm dark:bg-slate-800' : 'bg-white/80 dark:bg-slate-800/80'}`}
+                                                                            onClick={(e) => { e.stopPropagation(); togglePin(slot); }}
+                                                                            title={isPinned ? "Unpin class assignment" : "Pin this slot to prevent shuffling"}
+                                                                        >
+                                                                            {isPinned ? <Lock className="w-3 h-3 text-red-500" /> : <Unlock className="w-3 h-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" />}
                                                                         </div>
-                                                                        <p className={`text-xs font-bold truncate ${slot.type === 'tutorial' ? 'text-purple-900 dark:text-purple-100' : slot.type === 'lab' ? 'text-teal-900 dark:text-teal-100' : 'text-blue-900 dark:text-blue-100'}`}>
-                                                                            {slot.subject}
-                                                                        </p>
-                                                                    </div>
-                                                                    <div className="mt-2 flex items-center gap-1">
-                                                                        <div className="w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-700 flex justify-center items-center overflow-hidden shrink-0">
-                                                                            <span className="text-[8px]">{slot.faculty?.charAt(0)}</span>
+
+                                                                        <div>
+                                                                            <div className="flex justify-between items-start mb-1">
+                                                                                <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 border-none truncate max-w-[55px] ${slot.type === 'tutorial' ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300' : slot.type === 'lab' ? 'bg-teal-100 dark:bg-teal-500/20 text-teal-700 dark:text-teal-300' : 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300'}`}>
+                                                                                    {slot.targets.join(", ")}
+                                                                                </Badge>
+                                                                                <span className={`text-[10px] font-medium truncate ${isPinned ? 'text-slate-800 dark:text-slate-200 flex-1 text-right mr-5' : 'text-slate-500 dark:text-slate-400'}`}>{slot.room}</span>
+                                                                            </div>
+                                                                            <p className={`text-xs font-bold truncate ${slot.type === 'tutorial' ? 'text-purple-900 dark:text-purple-100' : slot.type === 'lab' ? 'text-teal-900 dark:text-teal-100' : 'text-blue-900 dark:text-blue-100'}`}>
+                                                                                {slot.subject}
+                                                                            </p>
                                                                         </div>
-                                                                        <p className="text-[10px] text-slate-600 dark:text-slate-400 font-medium truncate">
-                                                                            {slot.faculty}
-                                                                        </p>
+                                                                        <div className="mt-2 flex items-center gap-1">
+                                                                            <div className="w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-700 flex justify-center items-center overflow-hidden shrink-0">
+                                                                                <span className="text-[8px]">{slot.faculty?.charAt(0)}</span>
+                                                                            </div>
+                                                                            <p className="text-[10px] text-slate-600 dark:text-slate-400 font-medium truncate">
+                                                                                {slot.faculty}
+                                                                            </p>
+                                                                        </div>
                                                                     </div>
-                                                                </div>
-                                                            ))}
+                                                                );
+                                                            })}
                                                         </div>
                                                     ) : (
                                                         <div className="h-full w-full rounded-md border border-dashed border-slate-200 dark:border-slate-800 opacity-0 group-hover/slot:opacity-100 transition-opacity flex items-center justify-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">

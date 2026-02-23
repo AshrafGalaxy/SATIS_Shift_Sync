@@ -372,7 +372,7 @@ export default function DashboardOverview() {
             }
 
             alert("Database Nuked Successfully! All testing records have been erased.");
-            window.location.reload();
+            fetchDashboardStats(); // Soft refresh instead of hard reload
         } catch (err: any) {
             console.error("Clearing Error:", err);
             alert("Clearing failed: " + (err.message || "Unknown error"));
@@ -524,6 +524,29 @@ export default function DashboardOverview() {
                 };
             }));
 
+            // Retrieve pinned classes to send back as FORCE_PIN rules
+            let customRules: any[] = [];
+            const storedPins = localStorage.getItem(`pinned_classes_${instId}`);
+            if (storedPins) {
+                try {
+                    const pins = JSON.parse(storedPins);
+                    customRules = pins.map((pin: string, index: number) => {
+                        const parts = pin.split("|"); // w_id|room|day|time
+                        const w_id = parts[0];
+                        return {
+                            id: `PIN_${index}`,
+                            condition_field: "workload_id",
+                            condition_operator: "EQUALS",
+                            condition_value: w_id,
+                            action_type: "FORCE_PIN",
+                            action_value: `${parts[1]}|${parts[2]}|${parts[3]}`
+                        };
+                    });
+                } catch (e) {
+                    console.warn("Could not parse pinned class preferences:", e);
+                }
+            }
+
             // Construct the Python Engine Payload dynamically from SQL Result!
             const dynamicPayload = {
                 college_settings: {
@@ -531,7 +554,7 @@ export default function DashboardOverview() {
                     time_slots: inst.time_slots,
                     lunch_slot: inst.lunch_slot,
                     max_continuous_lectures: inst.max_continuous_lectures,
-                    custom_rules: []
+                    custom_rules: customRules
                 },
                 rooms_config: {
                     rooms: rooms?.map(r => ({ id: r.name, type: r.type, capacity: r.capacity, tags: r.tags }))
@@ -589,6 +612,7 @@ export default function DashboardOverview() {
                 setGenerationStep(3); // Complete
                 setTimeout(() => {
                     setIsGenerating(false);
+                    fetchDashboardStats(); // Instantly update the timestamp and top metrics
                     alert(`Success! Generated 4D Matrix saved to PostgreSQL!`);
                 }, 1500);
             }, 1000);
@@ -658,7 +682,7 @@ export default function DashboardOverview() {
                                             className={`flex-1 min-h-[4rem] h-auto py-3 px-6 text-sm sm:text-base lg:text-lg rounded-2xl text-white shadow-xl transition-all duration-300 group hover:scale-[1.02] active:scale-95 flex-col sm:flex-row items-center justify-center text-center whitespace-normal leading-tight ${isDbReady ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-blue-600/25 hover:shadow-blue-600/40" : "bg-slate-400 dark:bg-slate-800 hover:bg-slate-500 dark:hover:bg-slate-700 shadow-none"}`}
                                         >
                                             <Play className={`w-5 h-5 sm:mr-3 mb-1 sm:mb-0 shrink-0 transition-all ${isDbReady ? "fill-white/20 group-hover:fill-white/40" : "fill-white/10"}`} />
-                                            <span>{isDbReady ? "Generate Smart Timetable" : "Setup Required (Click for details)"}</span>
+                                            <span>{isDbReady ? "Generate Timetable / Shuffle" : "Setup Required (Click for details)"}</span>
                                         </Button>
                                         <Button
                                             size="lg"
@@ -671,9 +695,11 @@ export default function DashboardOverview() {
                                             Refresh Sync
                                         </Button>
                                     </div>
-                                    <p className="text-sm text-slate-500 mt-4 flex items-center gap-1.5 transition-opacity">
-                                        <Clock className="w-4 h-4" />
-                                        Estimated solving time: ~45s
+                                    <p className="text-sm text-slate-500 mt-4 flex items-center justify-between transition-opacity w-full">
+                                        <span className="flex items-center gap-1.5"><Clock className="w-4 h-4" /> Estimated solving time: ~45s</span>
+                                    </p>
+                                    <p className="text-sm text-purple-600 dark:text-purple-400 mt-2 font-medium bg-purple-50 dark:bg-purple-900/20 px-4 py-2 rounded-lg border border-purple-100 dark:border-purple-800/50">
+                                        Don't like this layout? Click generate again to see alternative valid arrangements! Locked classes stay pinned.
                                     </p>
                                 </motion.div>
                             ) : (

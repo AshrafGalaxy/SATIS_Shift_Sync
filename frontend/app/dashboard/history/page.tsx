@@ -4,15 +4,18 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { Trash2, AlertTriangle, Loader2, CalendarDays, ExternalLink, Clock, History } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from "@/components/ui/card";
 import { createClient } from "@/utils/supabase/client";
+import { MasterTimetableView } from "../timetable/page";
 
 export default function HistoryPage() {
     const [history, setHistory] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
     const [isClearingAll, setIsClearingAll] = useState(false);
+    const [selectedTimetableId, setSelectedTimetableId] = useState<string | null>(null);
 
     const router = useRouter();
     const supabase = createClient();
@@ -122,7 +125,7 @@ export default function HistoryPage() {
                         </div>
                     ) : (
                         <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {history.map((record) => (
+                            {history.map((record, index) => (
                                 <div key={record.id} className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
                                     <div className="flex items-start sm:items-center gap-4 w-full">
                                         <div className={`w-10 h-10 rounded-full border flex items-center justify-center shrink-0 mt-1 sm:mt-0 ${record.status === 'failed' ? 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800' : 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800'}`}>
@@ -134,7 +137,7 @@ export default function HistoryPage() {
                                         </div>
                                         <div className="flex-1 w-full max-w-3xl overflow-hidden">
                                             <h4 className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2 flex-wrap">
-                                                {record.status === 'failed' ? "Generation Failed" : "Optimal Timetable"}
+                                                {record.status === 'failed' ? "Generation Failed" : `Timetable Version ${history.length - index}`}
                                                 {record.status === 'failed' && (
                                                     <span className="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 shrink-0">
                                                         Error
@@ -161,7 +164,7 @@ export default function HistoryPage() {
                                             <Button
                                                 variant="outline"
                                                 className="w-full sm:w-auto"
-                                                onClick={() => router.push(`/dashboard/timetable?id=${record.id}`)}
+                                                onClick={() => setSelectedTimetableId(record.id)}
                                             >
                                                 <ExternalLink className="w-4 h-4 mr-2" />
                                                 View Timetable
@@ -183,6 +186,33 @@ export default function HistoryPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Historical Dashboard Modal Sandbox */}
+            <Dialog open={!!selectedTimetableId} onOpenChange={(open) => !open && setSelectedTimetableId(null)}>
+                <DialogContent className="max-w-[95vw] sm:max-w-[95vw] md:max-w-[90vw] lg:max-w-[85vw] w-full h-[95vh] flex flex-col p-6 overflow-hidden bg-slate-50 dark:bg-slate-950">
+                    <DialogHeader className="shrink-0 mb-4 flex-row items-center justify-between">
+                        <div>
+                            <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                                <History className="w-6 h-6 text-blue-600" />
+                                Historical Timetable Preview
+                            </DialogTitle>
+                            <DialogDescription className="mt-1">
+                                Viewing an archived generation arrangement. You can export or print this historical version.
+                            </DialogDescription>
+                        </div>
+                    </DialogHeader>
+
+                    {/* Encapsulated Inner Matrix Renderer */}
+                    <div className="flex-1 w-full relative border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 overflow-y-auto">
+                        <div className="p-4 h-full relative">
+                            {selectedTimetableId && (
+                                <MasterTimetableView targetIdProp={selectedTimetableId} hideFullscreen={true} />
+                            )}
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
         </div>
     );
 }

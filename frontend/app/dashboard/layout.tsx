@@ -14,9 +14,9 @@ import {
     Search,
     Menu,
     X,
-    UserCircle,
     LogOut,
-    History
+    History,
+    BookOpen
 } from "lucide-react";
 
 import { createClient } from "@/utils/supabase/client";
@@ -24,13 +24,14 @@ import { createClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const sidebarLinks = [
     { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
     { name: "Master Timetable", href: "/dashboard/timetable", icon: CalendarDays },
     { name: "Resource Heatmap", href: "/dashboard/resources", icon: Map },
-    { name: "Faculty & Staff", href: "/dashboard/faculty", icon: Users },
     { name: "Generation History", href: "/dashboard/history", icon: History },
+    { name: "Documentation", href: "/dashboard/guide", icon: BookOpen },
     { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
@@ -130,6 +131,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
+                        <ThemeToggle />
                         <Button variant="ghost" size="icon" className="relative text-slate-500 hover:text-slate-900 dark:hover:text-slate-50">
                             <Bell className="w-5 h-5" />
                             <span className="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-red-500 border-2 border-white dark:border-slate-950"></span>
